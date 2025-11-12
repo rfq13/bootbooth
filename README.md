@@ -74,6 +74,55 @@ Aplikasi akan berjalan pada:
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:3001
 
+## Go Server (Backend Alternatif)
+
+Repositori ini kini menyertakan backend Go (`server-go`) yang menyediakan MJPEG preview stream dan endpoint API inti yang kompatibel dengan client yang ada.
+
+### Kebutuhan (Linux/WSL)
+- Linux dengan `gphoto2` dan `libgphoto2` terpasang
+- WSL di Windows (disarankan Ubuntu) dengan akses USB ke kamera
+- Go 1.21+
+
+### Jalankan via WSL (disarankan)
+1. Buka WSL dan masuk ke direktori proyek:
+
+   ```bash
+   wsl
+   cd /mnt/d/Ngoding/expr/bootbooth
+   ```
+
+2. Build dan jalankan server Go:
+
+   ```bash
+   cd server-go
+   go mod tidy
+   go run .
+   ```
+
+   Ini akan memulai:
+   - HTTP API di `http://localhost:3001`
+   - MJPEG stream di `http://localhost:8080/camera`
+
+3. Di terminal lain, jalankan client dev server:
+
+   ```bash
+   cd /mnt/d/Ngoding/expr/bootbooth/client
+   npm run dev
+   ```
+
+   Buka client di `http://localhost:5173`. Klik Preview; backend Go akan mengirim event `mjpeg-stream-started` dan client akan memuat stream MJPEG `<img>`.
+
+### Catatan
+- `SOCKET_URL` dan `API_URL` default ke `http://localhost:3001` dan kompatibel dengan backend Go.
+- Stream MJPEG menggunakan `gphoto2 --stdout --capture-movie` dengan parsing boundary JPEG.
+- Saat capture foto, stream dihentikan sementara untuk release USB, kemudian foto diunduh ke `server/uploads`.
+
+### Estimasi Resource (T620 Plus, 4GB RAM)
+- OS + Services: ~150MB
+- Backend Server (Go): ~50MB
+- gphoto2 process: ~20MB
+- Browser (Firefox) / Electron: ~200MB
+
 ## Cara Penggunaan
 
 ### Mode Simulasi (Tanpa Kamera)

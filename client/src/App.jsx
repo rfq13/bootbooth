@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { signal } from "@preact/signals";
-import { io } from "socket.io-client";
+import io from "socket.io-client";
 import CameraView from "./components/CameraView.jsx";
 import PhotoGallery from "./components/PhotoGallery.jsx";
 import Controls from "./components/Controls.jsx";
@@ -8,7 +8,10 @@ import StatusIndicator from "./components/StatusIndicator.jsx";
 import { appState } from "./main.jsx";
 import { SOCKET_URL } from "./constants";
 
-const socket = io(SOCKET_URL);
+const socket = io(SOCKET_URL, {
+  transports: ["websocket", "polling"],
+  path: "/socket.io/",
+});
 
 export default function App() {
   const [socketConnected, setSocketConnected] = useState(false);
