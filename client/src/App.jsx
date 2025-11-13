@@ -83,9 +83,20 @@ export default function App() {
       appState.value = {
         ...appState.value,
         photos: appState.value.photos.filter(
-          (photo) => photo.filename !== data.filename
+          (photo) => photo.Filename !== data.filename
         ),
       };
+
+      // If the deleted photo was the current photo, clear it
+      if (
+        appState.value.currentPhoto &&
+        appState.value.currentPhoto.Filename === data.filename
+      ) {
+        appState.value = {
+          ...appState.value,
+          currentPhoto: null,
+        };
+      }
     });
 
     socket.on("previewFrame", (data) => {
@@ -257,17 +268,28 @@ export default function App() {
 
   const deletePhoto = async (filename) => {
     try {
+      console.log("🗑️ Menghapus foto:", filename);
       const response = await fetch(`${API_URL}/api/photos/${filename}`, {
         method: "DELETE",
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.error || `HTTP error! status: ${response.status}`
+        );
+      }
 
       const data = await response.json();
 
       if (!data.success) {
         throw new Error(data.error || "Gagal menghapus foto");
       }
+
+      console.log("✅ Foto berhasil dihapus:", filename);
+      // Note: Photo list will be updated automatically via socket.io event
     } catch (error) {
-      console.error("Error deleting photo:", error);
+      console.error("❌ Error deleting photo:", error);
       alert("Gagal menghapus foto: " + error.message);
     }
   };

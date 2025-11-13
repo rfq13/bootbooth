@@ -290,9 +290,24 @@ export default function PhotoGallery({
         <div className="border-t border-gray-200 px-4 py-3 bg-gray-50">
           <div className="flex items-center justify-between">
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (confirm("Apakah Anda yakin ingin menghapus semua foto?")) {
-                  photos.forEach((photo) => onDeletePhoto(photo.Filename));
+                  // Create a copy of the photos array to avoid issues during iteration
+                  const photosToDelete = [...photos];
+                  for (const photo of photosToDelete) {
+                    try {
+                      await onDeletePhoto(photo.Filename);
+                      // Add a small delay between deletions to avoid overwhelming the server
+                      await new Promise((resolve) => setTimeout(resolve, 100));
+                    } catch (error) {
+                      console.error(
+                        "Error deleting photo:",
+                        photo.Filename,
+                        error
+                      );
+                      // Continue with other photos even if one fails
+                    }
+                  }
                 }
               }}
               className="text-sm text-red-600 hover:text-red-700 font-medium transition-colors"

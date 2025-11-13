@@ -12,7 +12,10 @@ export default function Controls({
         {/* Main Capture Button */}
         <div className="flex items-center space-x-4">
           <button
-            onClick={onCapture}
+            onClick={() => {
+              onCapture();
+              onStopPreview();
+            }}
             disabled={isCapturing || !cameraConnected}
             className={`
               relative group transition-all duration-200 transform
