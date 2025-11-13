@@ -17,7 +17,7 @@ function drawCover(ctx, img, dx, dy, dw, dh) {
   ctx.drawImage(img, -sx + dx, -sy + dy, cw, ch);
 }
 
-export default function PrintComposer({ photo, layoutId, onComposed }) {
+export default function PrintComposer({ photo, layoutId, onComposed, songTitle, songArtist }) {
   const canvasRef = useRef(null);
   const [dataUrl, setDataUrl] = useState(null);
 
@@ -158,10 +158,10 @@ export default function PrintComposer({ photo, layoutId, onComposed }) {
         ctx.fillStyle = "#333";
         ctx.font = "bold 32px system-ui";
         ctx.textAlign = "left";
-        ctx.fillText("About You", margin + 32, barY + 60);
+        ctx.fillText(songTitle || "About You", margin + 32, barY + 60);
         ctx.fillStyle = "#666";
         ctx.font = "24px system-ui";
-        ctx.fillText("The 1975", margin + 32, barY + 96);
+        ctx.fillText(songArtist || "The 1975", margin + 32, barY + 96);
 
         // Progress bar
         const pbX = margin + 32;
@@ -200,6 +200,100 @@ export default function PrintComposer({ photo, layoutId, onComposed }) {
         ctx.fill();
       }
 
+      // Spotify Player Card: satu foto + bar pemutar musik
+      else if (layoutId === "spotify_card") {
+        const headerH = 120;
+        const barH = 200;
+        const gapTop = 20;
+
+        // Header waktu
+        const d = new Date();
+        const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+        const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+        const headerDate = `${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}`;
+        const hh = String(d.getHours()).padStart(2, "0");
+        const mm = String(d.getMinutes()).padStart(2, "0");
+        ctx.fillStyle = "#555";
+        ctx.font = "bold 36px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText(headerDate, CANVAS_W / 2, margin + 40);
+        ctx.fillStyle = "#777";
+        ctx.font = "bold 64px system-ui";
+        ctx.fillText(`${hh}:${mm}`, CANVAS_W / 2, margin + 100);
+
+        // Area foto
+        const x = margin;
+        const y = margin + headerH + gapTop;
+        const dw = CANVAS_W - margin * 2;
+        const dh = CANVAS_H - (margin + headerH + gapTop) - margin - barH;
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(x, y, dw, dh, 28);
+        ctx.clip();
+        if (img) {
+          drawCover(ctx, img, x, y, dw, dh);
+        } else {
+          ctx.restore();
+          drawPlaceholder(ctx, x, y, dw, dh);
+        }
+        ctx.restore();
+
+        // Bar musik bawah
+        const barY = CANVAS_H - margin - barH;
+        ctx.fillStyle = "#ececec";
+        ctx.strokeStyle = "#d0d0d0";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(margin, barY, dw, barH, 36);
+        ctx.fill();
+        ctx.stroke();
+
+        // Judul & artis
+        ctx.fillStyle = "#333";
+        ctx.font = "bold 32px system-ui";
+        ctx.textAlign = "left";
+        ctx.fillText(songTitle || "About You", margin + 32, barY + 60);
+        ctx.fillStyle = "#666";
+        ctx.font = "24px system-ui";
+        ctx.fillText(songArtist || "The 1975", margin + 32, barY + 96);
+
+        // Progress bar
+        const pbX = margin + 32;
+        const pbY = barY + 120;
+        const pbW = dw - 64;
+        const pbH = 10;
+        ctx.fillStyle = "#d8d8d8";
+        ctx.roundRect(pbX, pbY, pbW, pbH, 5);
+        ctx.fill();
+        ctx.fillStyle = "#888";
+        ctx.roundRect(pbX, pbY, pbW * 0.45, pbH, 5);
+        ctx.fill();
+
+        // Kontrol
+        ctx.fillStyle = "#555";
+        // Prev
+        ctx.beginPath();
+        ctx.moveTo(pbX + 60, barY + 150);
+        ctx.lineTo(pbX + 60, barY + 180);
+        ctx.lineTo(pbX + 40, barY + 165);
+        ctx.closePath();
+        ctx.fill();
+        // Play
+        ctx.beginPath();
+        ctx.moveTo(pbX + 110, barY + 150);
+        ctx.lineTo(pbX + 110, barY + 180);
+        ctx.lineTo(pbX + 135, barY + 165);
+        ctx.closePath();
+        ctx.fill();
+        // Next
+        ctx.beginPath();
+        ctx.moveTo(pbX + 180, barY + 150);
+        ctx.lineTo(pbX + 180, barY + 180);
+        ctx.lineTo(pbX + 200, barY + 165);
+        ctx.closePath();
+        ctx.fill();
+      }
+
       const url = canvas.toDataURL("image/jpeg", 0.92);
       setDataUrl(url);
       if (onComposed) onComposed(url);
@@ -212,7 +306,7 @@ export default function PrintComposer({ photo, layoutId, onComposed }) {
     } else {
       proceedDraw(null);
     }
-  }, [photo, layoutId]);
+  }, [photo, layoutId, songTitle, songArtist]);
 
   const handleQueuePrint = async () => {
     if (!dataUrl) return;

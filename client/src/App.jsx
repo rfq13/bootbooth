@@ -32,6 +32,8 @@ export default function App() {
   const [currentPhoto, setCurrentPhoto] = useState(null);
   const [selectedLayout, setSelectedLayout] = useState("single_4R");
   const [composedUrl, setComposedUrl] = useState(null);
+  const [songTitle, setSongTitle] = useState("About You");
+  const [songArtist, setSongArtist] = useState("The 1975");
 
   useEffect(() => {
     checkCameraStatus();
@@ -295,11 +297,30 @@ export default function App() {
                         selectedLayout={selectedLayout}
                         onPick={(id) => setSelectedLayout(id)}
                       />
+                      {(selectedLayout === "photostrip_spotify" || selectedLayout === "spotify_card") && (
+                        <div className="mt-4 bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-primary-200 shadow-soft">
+                          <p className="text-secondary-800 font-medium mb-3">Teks Pemutar Musik</p>
+                          <label className="block text-sm text-secondary-700 mb-1">Judul Lagu</label>
+                          <input
+                            className="w-full mb-3 px-3 py-2 rounded-lg border border-primary-200 focus:border-primary-400 outline-none"
+                            value={songTitle}
+                            onInput={(e) => setSongTitle(e.currentTarget.value)}
+                          />
+                          <label className="block text-sm text-secondary-700 mb-1">Artis</label>
+                          <input
+                            className="w-full px-3 py-2 rounded-lg border border-primary-200 focus:border-primary-400 outline-none"
+                            value={songArtist}
+                            onInput={(e) => setSongArtist(e.currentTarget.value)}
+                          />
+                        </div>
+                      )}
                     </div>
                     <div>
                       <PrintComposer
                         photo={currentPhoto}
                         layoutId={selectedLayout}
+                        songTitle={songTitle}
+                        songArtist={songArtist}
                         onComposed={(url) => setComposedUrl(url)}
                       />
                     </div>

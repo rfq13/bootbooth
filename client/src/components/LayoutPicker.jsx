@@ -17,6 +17,11 @@ export default function LayoutPicker({ selectedLayout, onPick }) {
       name: "Photostrip Spotify",
       desc: "3 panel foto vertikal + bar musik",
     },
+    {
+      id: "spotify_card",
+      name: "Spotify Player Card",
+      desc: "Satu foto + bar pemutar musik",
+    },
   ];
 
   useEffect(() => {
