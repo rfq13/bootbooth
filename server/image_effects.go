@@ -30,9 +30,9 @@ type EffectParams struct {
 }
 
 type ImageEffects struct {
-	currentEffect EffectType
-	params        EffectParams
-	mu            sync.RWMutex
+    currentEffect EffectType
+    params        EffectParams
+    mu            sync.RWMutex
 }
 
 func NewImageEffects() *ImageEffects {
@@ -60,48 +60,47 @@ func (ie *ImageEffects) GetEffect() (EffectType, EffectParams) {
 }
 
 func (ie *ImageEffects) ApplyEffect(jpegData []byte) ([]byte, error) {
-	effect, params := ie.GetEffect()
-	
-	if effect == EffectNone {
-		return jpegData, nil
-	}
+    effect, params := ie.GetEffect()
 
-	// Decode JPEG
-	img, err := jpeg.Decode(bytes.NewReader(jpegData))
-	if err != nil {
-		return jpegData, err
-	}
+    // Always decode to allow post transforms (e.g., horizontal flip)
+    img, err := jpeg.Decode(bytes.NewReader(jpegData))
+    if err != nil {
+        return jpegData, err
+    }
 
-	// Apply effect
-	var processed image.Image
-	switch effect {
-	case EffectFishEye:
-		processed = applyFishEye(img, params)
-	case EffectGrayscale:
-		processed = applyGrayscale(img)
-	case EffectSepia:
-		processed = applySepia(img)
-	case EffectVignette:
-		processed = applyVignette(img, params)
-	case EffectBlur:
-		processed = applyBlur(img, int(params.Intensity*10))
-	case EffectSharpen:
-		processed = applySharpen(img)
-	case EffectInvert:
-		processed = applyInvert(img)
-	case EffectPixelate:
-		processed = applyPixelate(img, params.PixelSize)
-	default:
-		processed = img
-	}
+    // Apply selected effect (if any)
+    var processed image.Image
+    switch effect {
+    case EffectFishEye:
+        processed = applyFishEye(img, params)
+    case EffectGrayscale:
+        processed = applyGrayscale(img)
+    case EffectSepia:
+        processed = applySepia(img)
+    case EffectVignette:
+        processed = applyVignette(img, params)
+    case EffectBlur:
+        processed = applyBlur(img, int(params.Intensity*10))
+    case EffectSharpen:
+        processed = applySharpen(img)
+    case EffectInvert:
+        processed = applyInvert(img)
+    case EffectPixelate:
+        processed = applyPixelate(img, params.PixelSize)
+    default:
+        processed = img
+    }
 
-	// Encode back to JPEG
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, processed, &jpeg.Options{Quality: 85}); err != nil {
-		return jpegData, err
-	}
+    // Always apply horizontal flip to correct mirrored output
+    processed = applyHorizontalFlip(processed)
 
-	return buf.Bytes(), nil
+    // Encode back to JPEG
+    var buf bytes.Buffer
+    if err := jpeg.Encode(&buf, processed, &jpeg.Options{Quality: 85}); err != nil {
+        return jpegData, err
+    }
+
+    return buf.Bytes(), nil
 }
 
 // Fish Eye Effect - mimics Canon EF 8-15mm f/4L Fisheye USM with EXTREME barrel distortion
@@ -134,9 +133,9 @@ func applyFishEye(img image.Image, params EffectParams) image.Image {
 
 			var srcX, srcY float64
 
-			if normDist <= 1.0 {
-				// Apply EXTREME fisheye distortion
-				// Using inverse mapping: map from distorted to source
+            if normDist <= 1.0 {
+                // Apply EXTREME fisheye distortion
+                // Using inverse mapping: map from distorted to source
 				
 				// Stereographic projection (creates strong barrel distortion)
 				// r_src = 2 * f * tan(r_dst / (2*f))
@@ -153,32 +152,34 @@ func applyFishEye(img image.Image, params EffectParams) image.Image {
 				
 				srcX = centerX + math.Cos(theta)*srcRadius
 				srcY = centerY + math.Sin(theta)*srcRadius
-			} else {
-				// Outside circle - create circular vignette/black area
-				result.Set(x, y, color.Black)
-				continue
-			}
+            } else {
+                // Outside circle - fill using boundary color to avoid black frame
+                srcX = centerX + math.Cos(theta)*maxRadius
+                srcY = centerY + math.Sin(theta)*maxRadius
+            }
 
 			// Sample with bilinear interpolation
 			if srcX >= 1 && srcX < float64(width-2) && srcY >= 1 && srcY < float64(height-2) {
 				result.Set(x, y, bilinearInterpolateForFishEye(img, srcX, srcY))
 			} else {
-				// Edge vignetting
-				vignetteStrength := math.Max(0, 1.0-normDist*0.8)
-				if srcX >= 0 && srcX < float64(width) && srcY >= 0 && srcY < float64(height) {
-					c := img.At(int(srcX), int(srcY))
-					result.Set(x, y, applyVignetteForFishEye(c, vignetteStrength))
-				} else {
-					result.Set(x, y, color.RGBA{0, 0, 0, 255})
-				}
-			}
-		}
-	}
+                // Soft vignette near edges without black bands
+                vignetteStrength := math.Max(0, 1.0-normDist*0.6)
+                if srcX >= 0 && srcX < float64(width) && srcY >= 0 && srcY < float64(height) {
+                    c := img.At(int(srcX), int(srcY))
+                    result.Set(x, y, applyVignetteForFishEye(c, vignetteStrength))
+                } else {
+                    // Clamp to image bounds
+                    ix := int(math.Min(float64(width-1), math.Max(0, srcX)))
+                    iy := int(math.Min(float64(height-1), math.Max(0, srcY)))
+                    result.Set(x, y, img.At(ix, iy))
+                }
+            }
+        }
+    }
 
-	// Draw circular mask for authentic fisheye look
-	drawCircularMaskForFishEye(result, centerX, centerY, maxRadius)
+    // Removed hard circular mask to maximize usable area
 
-	return result
+    return result
 }
 
 // Draw circular mask with soft edge for fisheye effect
@@ -499,11 +500,26 @@ func applyPixelate(img image.Image, pixelSize int) image.Image {
 }
 
 func clamp(val float64) uint8 {
-	if val < 0 {
-		return 0
-	}
-	if val > 255 {
-		return 255
-	}
-	return uint8(val)
+    if val < 0 {
+        return 0
+    }
+    if val > 255 {
+        return 255
+    }
+    return uint8(val)
+}
+
+// applyHorizontalFlip flips the image horizontally
+func applyHorizontalFlip(img image.Image) image.Image {
+    b := img.Bounds()
+    w := b.Dx()
+    h := b.Dy()
+    out := image.NewRGBA(b)
+    for y := b.Min.Y; y < b.Min.Y+h; y++ {
+        for x := b.Min.X; x < b.Min.X+w; x++ {
+            srcX := b.Min.X + (w - 1) - (x - b.Min.X)
+            out.Set(x, y, img.At(srcX, y))
+        }
+    }
+    return out
 }

@@ -238,6 +238,15 @@ func main() {
         log.Printf("✅ Preview stream stopped")
     })
 
+    // Explicit handler to stop only MJPEG stream (used by client before capture)
+    server.OnEvent("/", "stop-mjpeg", func(s socketio.Conn) {
+        if mjpeg.IsActive() {
+            log.Printf("🛑 Stopping MJPEG stream (explicit)...")
+            mjpeg.stopStream()
+            s.Emit("mjpeg-stream-stopped", map[string]any{"success": true})
+        }
+    })
+
     server.OnEvent("/", "capture-photo", func(s socketio.Conn) {
         log.Printf("📸 Capturing photo...")
         

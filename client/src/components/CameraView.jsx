@@ -1,4 +1,5 @@
 import { API_URL } from "../constants";
+import { useRef } from "preact/hooks";
 
 const EFFECT_INFO = {
   none: { name: "Normal", icon: "📷" },
@@ -19,16 +20,30 @@ export default function CameraView({
   previewImage,
   isPreviewActive,
   mjpegStreamUrl,
+  mjpegBust,
   currentEffect,
   effectParams,
 }) {
+  const containerRef = useRef(null);
+
+  const handleFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.();
+      return;
+    }
+    const el = containerRef.current;
+    if (el && el.requestFullscreen) {
+      el.requestFullscreen();
+    }
+  };
   return (
-    <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+    <div className="bg-white rounded-xl shadow-lg overflow-hidden" ref={containerRef}>
       <div className="aspect-video bg-gray-900 relative">
         {/* Camera Preview or Current Photo - Preview takes priority over captured photo */}
         {mjpegStreamUrl && isPreviewActive ? (
           <img
-            src={mjpegStreamUrl}
+            key={`mjpeg-${mjpegBust || 0}`}
+            src={`${mjpegStreamUrl}${mjpegBust ? `?t=${mjpegBust}` : ""}`}
             alt="Live MJPEG stream"
             className="w-full h-full object-contain"
             onError={(e) => {
@@ -141,6 +156,29 @@ export default function CameraView({
             </div>
           </div>
         )}
+
+        {/* Fullscreen Button */}
+        <div className="absolute top-4 right-4 mt-12">
+          <button
+            onClick={handleFullscreen}
+            title="Fullscreen"
+            className="bg-gray-800/70 hover:bg-gray-700 text-white p-2 rounded-lg shadow-md"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 8V4h4M4 20v-4h4M20 8V4h-4M20 20v-4h-4"
+              />
+            </svg>
+          </button>
+        </div>
 
         {/* Photo Info Overlay */}
         {currentPhoto && (

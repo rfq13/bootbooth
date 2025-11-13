@@ -23,6 +23,7 @@ export default function App() {
   const [previewImage, setPreviewImage] = useState(null);
   const [isPreviewActive, setIsPreviewActive] = useState(false);
   const [mjpegStreamUrl, setMjpegStreamUrl] = useState(null);
+  const [mjpegBust, setMjpegBust] = useState(0);
   const [currentEffect, setCurrentEffect] = useState("none");
   const [effectParams, setEffectParams] = useState({});
   // Flag untuk mencegah double start preview
@@ -97,6 +98,7 @@ export default function App() {
       console.log("Preview dimulai:", data);
       if (data.success) {
         setIsPreviewActive(true);
+        setMjpegBust(Date.now());
         // Clear current photo when preview starts to prioritize live preview
         appState.value = {
           ...appState.value,
@@ -128,6 +130,7 @@ export default function App() {
       if (data.success) {
         // Use the URL with timestamp from server
         setMjpegStreamUrl(data.streamUrl);
+        setMjpegBust(Date.now());
         setIsPreviewActive(true);
         // Clear current photo when MJPEG stream starts to prioritize live preview
         appState.value = {
@@ -142,6 +145,7 @@ export default function App() {
     socket.on("mjpeg-stream-stopped", (data) => {
       console.log("MJPEG stream dihentikan:", data);
       setMjpegStreamUrl(null);
+      setMjpegBust(0);
       setIsPreviewActive(false);
       setPreviewImage(null);
       // Reset flag jika stream dihentikan oleh server
@@ -369,6 +373,7 @@ export default function App() {
               previewImage={previewImage}
               isPreviewActive={isPreviewActive}
               mjpegStreamUrl={mjpegStreamUrl}
+              mjpegBust={mjpegBust}
               currentEffect={currentEffect}
               effectParams={effectParams}
             />
