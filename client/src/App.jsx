@@ -5,12 +5,17 @@ import CameraView from "./components/CameraView.jsx";
 import PhotoGallery from "./components/PhotoGallery.jsx";
 import Controls from "./components/Controls.jsx";
 import StatusIndicator from "./components/StatusIndicator.jsx";
+import EffectControls from "./components/EffectControls.jsx";
 import { appState } from "./main.jsx";
-import { SOCKET_URL } from "./constants";
+import { SOCKET_URL, API_URL } from "./constants";
 
 const socket = io(SOCKET_URL, {
   transports: ["websocket", "polling"],
   path: "/socket.io/",
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+  timeout: 5000,
 });
 
 export default function App() {
@@ -18,6 +23,10 @@ export default function App() {
   const [previewImage, setPreviewImage] = useState(null);
   const [isPreviewActive, setIsPreviewActive] = useState(false);
   const [mjpegStreamUrl, setMjpegStreamUrl] = useState(null);
+  const [currentEffect, setCurrentEffect] = useState("none");
+  const [effectParams, setEffectParams] = useState({});
+  // Flag untuk mencegah double start preview
+  const [isStartingPreview, setIsStartingPreview] = useState(false);
 
   useEffect(() => {
     // Check camera status on mount
@@ -30,9 +39,23 @@ export default function App() {
       console.log("Terhubung ke server");
     });
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", (reason) => {
       setSocketConnected(false);
-      console.log("Terputus dari server");
+      console.log("Terputus dari server:", reason);
+    });
+
+    socket.on("connect_error", (error) => {
+      console.error("Socket connection error:", error);
+      setSocketConnected(false);
+    });
+
+    socket.on("reconnect", (attemptNumber) => {
+      console.log("Reconnected to server after", attemptNumber, "attempts");
+      setSocketConnected(true);
+    });
+
+    socket.on("reconnect_error", (error) => {
+      console.error("Reconnection error:", error);
     });
 
     socket.on("photoCaptured", (data) => {
@@ -80,12 +103,17 @@ export default function App() {
           currentPhoto: null,
         };
       }
+      // Reset flag ketika preview berhasil dimulai (baik MJPEG maupun frame‑by‑frame)
+      setIsStartingPreview(false);
     });
 
     socket.on("preview-stopped", (data) => {
       console.log("Preview dihentikan:", data);
       setIsPreviewActive(false);
       setPreviewImage(null);
+      setMjpegStreamUrl(null);
+      // Reset flag jika preview dihentikan oleh server
+      setIsStartingPreview(false);
     });
 
     socket.on("preview-error", (data) => {
@@ -98,6 +126,7 @@ export default function App() {
     socket.on("mjpeg-stream-started", (data) => {
       console.log("MJPEG stream dimulai:", data);
       if (data.success) {
+        // Use the URL with timestamp from server
         setMjpegStreamUrl(data.streamUrl);
         setIsPreviewActive(true);
         // Clear current photo when MJPEG stream starts to prioritize live preview
@@ -106,12 +135,32 @@ export default function App() {
           currentPhoto: null,
         };
       }
+      // Reset flag ketika MJPEG stream berhasil dimulai
+      setIsStartingPreview(false);
     });
 
     socket.on("mjpeg-stream-stopped", (data) => {
       console.log("MJPEG stream dihentikan:", data);
       setMjpegStreamUrl(null);
       setIsPreviewActive(false);
+      setPreviewImage(null);
+      // Reset flag jika stream dihentikan oleh server
+      setIsStartingPreview(false);
+    });
+
+    socket.on("effect-changed", (data) => {
+      console.log("Efek diubah:", data);
+      if (data.success) {
+        setCurrentEffect(data.effect);
+        // Convert backend params (uppercase) to frontend params (lowercase)
+        const convertedParams = {
+          intensity: data.params?.Intensity || data.params?.intensity || 0.5,
+          radius: data.params?.Radius || data.params?.radius || 1.0,
+          pixelSize: data.params?.PixelSize || data.params?.pixelSize || 10,
+        };
+        setEffectParams(convertedParams);
+        console.log("Effect params converted:", convertedParams);
+      }
     });
 
     return () => {
@@ -126,12 +175,13 @@ export default function App() {
       socket.off("mjpeg-stream-started");
       socket.off("mjpeg-stream-stopped");
       socket.off("photo-captured");
+      socket.off("effect-changed");
     };
   }, []);
 
   const checkCameraStatus = async () => {
     try {
-      const response = await fetch("/api/status");
+      const response = await fetch(`${API_URL}/api/status`);
       const data = await response.json();
       appState.value = {
         ...appState.value,
@@ -144,7 +194,7 @@ export default function App() {
 
   const loadPhotos = async () => {
     try {
-      const response = await fetch("/api/photos");
+      const response = await fetch(`${API_URL}/api/photos`);
       const data = await response.json();
       appState.value = {
         ...appState.value,
@@ -159,6 +209,15 @@ export default function App() {
     if (appState.value.isCapturing) return;
 
     try {
+      // Pastikan preview dan MJPEG stream dihentikan sebelum capture
+      socket.emit("stop-preview");
+      socket.emit("stop-mjpeg"); // custom event to ensure MJPEG dihentikan (jika diperlukan)
+
+      // Bersihkan state preview
+      setPreviewImage(null);
+      setMjpegStreamUrl(null);
+      setIsPreviewActive(false);
+
       appState.value = {
         ...appState.value,
         isCapturing: true,
@@ -179,7 +238,7 @@ export default function App() {
         countdown: 0,
       };
 
-      // Use socket for capture to handle stream properly
+      // Use socket untuk capture foto
       socket.emit("capture-photo");
     } catch (error) {
       console.error("Error capturing photo:", error);
@@ -194,7 +253,7 @@ export default function App() {
 
   const deletePhoto = async (filename) => {
     try {
-      const response = await fetch(`/api/photos/${filename}`, {
+      const response = await fetch(`${API_URL}/api/photos/${filename}`, {
         method: "DELETE",
       });
 
@@ -222,11 +281,37 @@ export default function App() {
       return;
     }
 
-    socket.emit("start-preview");
+    // Jika preview sedang dalam proses start, abaikan klik lagi
+    if (isStartingPreview) {
+      return;
+    }
+    setIsStartingPreview(true);
+
+    // 1️⃣ Pastikan preview sebelumnya dihentikan sepenuhnya
+    socket.emit("stop-preview");
+    // Bersihkan state UI
+    setMjpegStreamUrl(null);
+    setPreviewImage(null);
+    setIsPreviewActive(false);
+
+    // 2️⃣ Tunggu singkat agar server selesai menutup stream lama
+    setTimeout(() => {
+      // Mulai preview kembali
+      socket.emit("start-preview");
+    }, 300); // 300 ms cukup untuk cleanup
   };
 
   const stopPreview = () => {
     socket.emit("stop-preview");
+    // Pastikan MJPEG stream juga dihentikan bila masih aktif
+    socket.emit("stop-mjpeg");
+    // Reset flag jika user menghentikan preview secara manual
+    setIsStartingPreview(false);
+  };
+
+  const handleEffectChange = (effect, params) => {
+    setCurrentEffect(effect);
+    setEffectParams(params);
   };
 
   return (
@@ -276,7 +361,7 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Camera View */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-6">
             <CameraView
               isCapturing={appState.value.isCapturing}
               countdown={appState.value.countdown}
@@ -284,6 +369,8 @@ export default function App() {
               previewImage={previewImage}
               isPreviewActive={isPreviewActive}
               mjpegStreamUrl={mjpegStreamUrl}
+              currentEffect={currentEffect}
+              effectParams={effectParams}
             />
             <Controls
               onCapture={capturePhoto}
@@ -295,8 +382,15 @@ export default function App() {
             />
           </div>
 
-          {/* Photo Gallery */}
-          <div className="lg:col-span-1">
+          {/* Sidebar */}
+          <div className="lg:col-span-1 space-y-6">
+            {/* Effect Controls */}
+            <EffectControls
+              socket={socket}
+              onEffectChange={handleEffectChange}
+            />
+
+            {/* Photo Gallery */}
             <PhotoGallery
               photos={appState.value.photos}
               onSelectPhoto={selectPhoto}

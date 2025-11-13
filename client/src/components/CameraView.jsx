@@ -1,4 +1,17 @@
 import { API_URL } from "../constants";
+
+const EFFECT_INFO = {
+  none: { name: "Normal", icon: "📷" },
+  fisheye: { name: "Fish Eye", icon: "🐟" },
+  grayscale: { name: "Grayscale", icon: "⚫" },
+  sepia: { name: "Sepia", icon: "📜" },
+  vignette: { name: "Vignette", icon: "🌑" },
+  blur: { name: "Blur", icon: "💨" },
+  sharpen: { name: "Sharpen", icon: "🔪" },
+  invert: { name: "Invert", icon: "🔄" },
+  pixelate: { name: "Pixelate", icon: "🟦" },
+};
+
 export default function CameraView({
   isCapturing,
   countdown,
@@ -6,6 +19,8 @@ export default function CameraView({
   previewImage,
   isPreviewActive,
   mjpegStreamUrl,
+  currentEffect,
+  effectParams,
 }) {
   return (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -33,7 +48,7 @@ export default function CameraView({
           />
         ) : currentPhoto ? (
           <img
-            src={`${API_URL}${currentPhoto.path}`}
+            src={`${API_URL}${currentPhoto.Path}`}
             alt="Captured photo"
             className="w-full h-full object-contain"
           />
@@ -112,6 +127,21 @@ export default function CameraView({
           </div>
         </div>
 
+        {/* Effect Badge */}
+        {currentEffect && currentEffect !== "none" && (
+          <div className="absolute top-4 right-4">
+            <div className="bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-medium flex items-center space-x-2 shadow-lg">
+              <span className="text-lg">
+                {EFFECT_INFO[currentEffect]?.icon || "🎨"}
+              </span>
+              <span>{EFFECT_INFO[currentEffect]?.name || "Effect"}</span>
+              {effectParams && Object.keys(effectParams).length > 0 && (
+                <div className="w-2 h-2 bg-purple-300 rounded-full animate-pulse"></div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Photo Info Overlay */}
         {currentPhoto && (
           <div className="absolute bottom-4 left-4 right-4">
@@ -120,7 +150,7 @@ export default function CameraView({
                 <div>
                   <p className="text-sm font-medium">Foto Terakhir</p>
                   <p className="text-xs text-gray-300">
-                    {new Date(parseInt(currentPhoto.timestamp)).toLocaleString(
+                    {new Date(parseInt(currentPhoto.Timestamp)).toLocaleString(
                       "id-ID"
                     )}
                   </p>
@@ -157,6 +187,15 @@ export default function CameraView({
               <span className="font-medium">Resolusi:</span>
               <span className="ml-1 text-primary-600">HD</span>
             </div>
+            {currentEffect && currentEffect !== "none" && (
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">Efek:</span>
+                <span className="ml-1 text-purple-600 flex items-center space-x-1">
+                  <span>{EFFECT_INFO[currentEffect]?.icon}</span>
+                  <span>{EFFECT_INFO[currentEffect]?.name}</span>
+                </span>
+              </div>
+            )}
           </div>
           <div className="flex items-center space-x-2">
             <button className="p-2 text-gray-500 hover:text-gray-700 transition-colors">
