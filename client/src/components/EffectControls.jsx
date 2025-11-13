@@ -1,151 +1,42 @@
-import { useState, useEffect } from "preact/hooks";
+import React from "react";
+import { usePhotoBooth } from "../context/PhotoBoothContext";
 
 const EFFECTS = [
   { id: "none", name: "Normal", icon: "📷", hasParams: false },
-  {
-    id: "fisheye",
-    name: "Fish Eye",
-    icon: "🐟",
-    hasParams: true,
-    hasIntensity: true,
-    hasRadius: true,
-  },
-  { id: "grayscale", name: "Grayscale", icon: "⚫", hasParams: false },
-  { id: "sepia", name: "Sepia", icon: "📜", hasParams: false },
-  {
-    id: "vignette",
-    name: "Vignette",
-    icon: "🌑",
-    hasParams: true,
-    hasIntensity: true,
-    hasRadius: true,
-  },
-  { id: "blur", name: "Blur", icon: "💨", hasParams: true, hasIntensity: true },
-  { id: "sharpen", name: "Sharpen", icon: "🔪", hasParams: false },
+  { id: "grayscale", name: "B&W", icon: "🖤", hasParams: false },
+  { id: "sepia", name: "Sepia", icon: "🤎", hasParams: false },
+  { id: "blur", name: "Blur", icon: "💫", hasParams: true, hasRadius: true },
+  { id: "brightness", name: "Bright", icon: "☀️", hasParams: true, hasIntensity: true },
+  { id: "contrast", name: "Contrast", icon: "🎯", hasParams: true, hasIntensity: true },
+  { id: "saturate", name: "Saturate", icon: "🌈", hasParams: true, hasIntensity: true },
+  { id: "hue-rotate", name: "Hue", icon: "🎨", hasParams: true, hasIntensity: true },
   { id: "invert", name: "Invert", icon: "🔄", hasParams: false },
-  {
-    id: "pixelate",
-    name: "Pixelate",
-    icon: "🟦",
-    hasParams: true,
-    hasPixelSize: true,
-  },
+  { id: "pixelate", name: "Pixel", icon: "🔲", hasParams: true, hasPixelSize: true },
+  { id: "fisheye", name: "Fish Eye", icon: "🐟", hasParams: true, hasIntensity: true },
+  { id: "vintage", name: "Vintage", icon: "📸", hasParams: true, hasIntensity: true },
+  { id: "cold", name: "Cold", icon: "❄️", hasParams: true, hasIntensity: true },
+  { id: "warm", name: "Warm", icon: "🔥", hasParams: true, hasIntensity: true },
+  { id: "dramatic", name: "Drama", icon: "🎭", hasParams: true, hasIntensity: true },
 ];
 
-export default function EffectControls({ socket, onEffectChange }) {
-  const [currentEffect, setCurrentEffect] = useState("none");
-  const [params, setParams] = useState({
-    intensity: 0.5,
-    radius: 1.0,
-    pixelSize: 10,
-  });
+export default function EffectControls() {
+  const { currentEffect, setEffect, effectParams, setEffectParams } = usePhotoBooth();
 
-  useEffect(() => {
-    if (socket) {
-      // Request current effect when component mounts
-      socket.emit("get-effect");
+  const params = effectParams[currentEffect] || {};
+  const currentEffectData = EFFECTS.find((e) => e.id === currentEffect) || EFFECTS[0];
 
-      // Listen for effect changes from other clients
-      socket.on("current-effect", (data) => {
-        setCurrentEffect(data.effect || "none");
-        // Convert backend params (uppercase) to frontend params (lowercase)
-        const convertedParams = {
-          intensity: data.params?.Intensity || data.params?.intensity || 0.5,
-          radius: data.params?.Radius || data.params?.radius || 1.0,
-          pixelSize: data.params?.PixelSize || data.params?.pixelSize || 10,
-        };
-        setParams(convertedParams);
-      });
-
-      socket.on("effectChanged", (data) => {
-        setCurrentEffect(data.effect || "none");
-        // Convert backend params (uppercase) to frontend params (lowercase)
-        const convertedParams = {
-          intensity: data.params?.Intensity || data.params?.intensity || 0.5,
-          radius: data.params?.Radius || data.params?.radius || 1.0,
-          pixelSize: data.params?.PixelSize || data.params?.pixelSize || 10,
-        };
-        setParams(convertedParams);
-        if (onEffectChange) {
-          onEffectChange(data.effect, convertedParams);
-        }
-      });
-
-      return () => {
-        socket.off("current-effect");
-        socket.off("effectChanged");
-      };
-    }
-  }, [socket, onEffectChange]);
-
-  const setEffect = (effectId) => {
-    if (!socket) return;
-
-    const effect = EFFECTS.find((e) => e.id === effectId);
-    if (!effect) return;
-
-    // Prepare parameters based on effect type
-    const effectParams = {};
-    if (effect.hasIntensity) {
-      effectParams.intensity = params.intensity;
-    }
-    if (effect.hasRadius) {
-      effectParams.radius = params.radius;
-    }
-    if (effect.hasPixelSize) {
-      effectParams.pixelSize = params.pixelSize;
-    }
-
-    socket.emit("set-effect", {
-      effect: effectId,
-      params: effectParams,
-    });
-
-    setCurrentEffect(effectId);
-    if (onEffectChange) {
-      onEffectChange(effectId, effectParams);
-    }
+  const updateParam = (key, value) => {
+    setEffectParams((prev) => ({
+      ...prev,
+      [currentEffect]: {
+        ...prev[currentEffect],
+        [key]: value,
+      },
+    }));
   };
-
-  const updateParam = (paramName, value) => {
-    const newParams = { ...params, [paramName]: value };
-    setParams(newParams);
-
-    // If we have a current effect that uses this parameter, update it
-    if (currentEffect !== "none" && socket) {
-      const effect = EFFECTS.find((e) => e.id === currentEffect);
-      if (effect) {
-        const effectParams = {};
-        if (effect.hasIntensity) {
-          effectParams.intensity = newParams.intensity;
-        }
-        if (effect.hasRadius) {
-          effectParams.radius = newParams.radius;
-        }
-        if (effect.hasPixelSize) {
-          effectParams.pixelSize = newParams.pixelSize;
-        }
-
-        socket.emit("set-effect", {
-          effect: currentEffect,
-          params: effectParams,
-        });
-
-        if (onEffectChange) {
-          onEffectChange(currentEffect, effectParams);
-        }
-      }
-    }
-  };
-
-  const getCurrentEffectData = () => {
-    return EFFECTS.find((e) => e.id === currentEffect) || EFFECTS[0];
-  };
-
-  const currentEffectData = getCurrentEffectData();
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6">
+    <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-lg p-6 border border-white/20">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
           <span>🎨</span>
@@ -153,7 +44,7 @@ export default function EffectControls({ socket, onEffectChange }) {
         </h3>
         <div className="flex items-center space-x-2">
           <span className="text-sm text-gray-500">Aktif:</span>
-          <span className="text-sm font-medium text-primary-600">
+          <span className="text-sm font-medium text-orange-600">
             {currentEffectData.icon} {currentEffectData.name}
           </span>
         </div>
@@ -170,8 +61,8 @@ export default function EffectControls({ socket, onEffectChange }) {
               flex flex-col items-center justify-center space-y-1
               ${
                 currentEffect === effect.id
-                  ? "border-primary-500 bg-primary-50 text-primary-700 shadow-md transform scale-105"
-                  : "border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700"
+                  ? "border-orange-200 bg-gradient-to-br from-orange-100 via-yellow-100 to-amber-100 text-gray-800 shadow-lg transform scale-105"
+                  : "border-white/30 bg-white/40 hover:bg-orange-50 text-gray-700 backdrop-blur-sm"
               }
             `}
             title={effect.name}
@@ -181,7 +72,7 @@ export default function EffectControls({ socket, onEffectChange }) {
               {effect.name}
             </span>
             {currentEffect === effect.id && (
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary-500 rounded-full animate-pulse"></div>
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full animate-pulse"></div>
             )}
           </button>
         ))}
@@ -189,7 +80,7 @@ export default function EffectControls({ socket, onEffectChange }) {
 
       {/* Effect Parameters */}
       {currentEffectData.hasParams && (
-        <div className="space-y-4 border-t border-gray-200 pt-4">
+        <div className="space-y-4 border-t border-white/20 pt-4">
           <h4 className="text-sm font-medium text-gray-900 mb-3">
             Parameter Efek
           </h4>
@@ -214,7 +105,7 @@ export default function EffectControls({ socket, onEffectChange }) {
                 onChange={(e) =>
                   updateParam("intensity", parseFloat(e.target.value))
                 }
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                className="w-full h-2 bg-orange-100 rounded-lg appearance-none cursor-pointer accent-orange-400"
               />
             </div>
           )}
@@ -239,7 +130,7 @@ export default function EffectControls({ socket, onEffectChange }) {
                 onChange={(e) =>
                   updateParam("radius", parseFloat(e.target.value))
                 }
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                className="w-full h-2 bg-orange-100 rounded-lg appearance-none cursor-pointer accent-orange-400"
               />
             </div>
           )}
@@ -264,7 +155,7 @@ export default function EffectControls({ socket, onEffectChange }) {
                 onChange={(e) =>
                   updateParam("pixelSize", parseInt(e.target.value))
                 }
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                className="w-full h-2 bg-orange-100 rounded-lg appearance-none cursor-pointer accent-orange-400"
               />
             </div>
           )}
@@ -272,7 +163,7 @@ export default function EffectControls({ socket, onEffectChange }) {
       )}
 
       {/* Effect Description */}
-      <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+      <div className="mt-4 p-3 bg-white/40 rounded-lg backdrop-blur-sm">
         <p className="text-xs text-gray-600">
           <strong>Tips:</strong> Efek akan diterapkan secara real-time pada
           preview dan foto yang di-capture. Beberapa efek seperti Fish Eye dan

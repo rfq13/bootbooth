@@ -5,7 +5,8 @@ import CameraView from "./components/CameraView.jsx";
 import PhotoGallery from "./components/PhotoGallery.jsx";
 import Controls from "./components/Controls.jsx";
 import StatusIndicator from "./components/StatusIndicator.jsx";
-import EffectControls from "./components/EffectControls.jsx";
+import LayoutPicker from "./components/LayoutPicker.jsx";
+import PrintComposer from "./components/PrintComposer.jsx";
 import { appState } from "./main.jsx";
 import { SOCKET_URL, API_URL } from "./constants";
 
@@ -26,15 +27,16 @@ export default function App() {
   const [mjpegBust, setMjpegBust] = useState(0);
   const [currentEffect, setCurrentEffect] = useState("none");
   const [effectParams, setEffectParams] = useState({});
-  // Flag untuk mencegah double start preview
   const [isStartingPreview, setIsStartingPreview] = useState(false);
+  const [photos, setPhotos] = useState([]);
+  const [currentPhoto, setCurrentPhoto] = useState(null);
+  const [selectedLayout, setSelectedLayout] = useState("single_4R");
+  const [composedUrl, setComposedUrl] = useState(null);
 
   useEffect(() => {
-    // Check camera status on mount
     checkCameraStatus();
-    loadPhotos();
+    loadPhotos(setPhotos);
 
-    // Socket event listeners
     socket.on("connect", () => {
       setSocketConnected(true);
       console.log("Terhubung ke server");
@@ -50,392 +52,285 @@ export default function App() {
       setSocketConnected(false);
     });
 
-    socket.on("reconnect", (attemptNumber) => {
-      console.log("Reconnected to server after", attemptNumber, "attempts");
-      setSocketConnected(true);
-    });
-
-    socket.on("reconnect_error", (error) => {
-      console.error("Reconnection error:", error);
-    });
-
-    socket.on("photoCaptured", (data) => {
-      console.log("Foto diambil:", data);
-      appState.value = {
-        ...appState.value,
-        photos: [data, ...appState.value.photos],
-        currentPhoto: data,
-        isCapturing: false,
-        flash: true,
-      };
-
-      // Remove flash effect after animation
-      setTimeout(() => {
-        appState.value = {
-          ...appState.value,
-          flash: false,
-        };
-      }, 300);
-    });
-
-    socket.on("photoDeleted", (data) => {
-      console.log("Foto dihapus:", data);
-      appState.value = {
-        ...appState.value,
-        photos: appState.value.photos.filter(
-          (photo) => photo.Filename !== data.filename
-        ),
-      };
-
-      // If the deleted photo was the current photo, clear it
-      if (
-        appState.value.currentPhoto &&
-        appState.value.currentPhoto.Filename === data.filename
-      ) {
-        appState.value = {
-          ...appState.value,
-          currentPhoto: null,
-        };
-      }
-    });
-
-    socket.on("previewFrame", (data) => {
+    socket.on("preview_frame", (data) => {
       if (data.image) {
         setPreviewImage(data.image);
       }
     });
 
-    socket.on("preview-started", (data) => {
-      console.log("Preview dimulai:", data);
-      if (data.success) {
-        setIsPreviewActive(true);
-        setMjpegBust(Date.now());
-        // Clear current photo when preview starts to prioritize live preview
-        appState.value = {
-          ...appState.value,
-          currentPhoto: null,
-        };
-      }
-      // Reset flag ketika preview berhasil dimulai (baik MJPEG maupun frame‑by‑frame)
-      setIsStartingPreview(false);
-    });
-
-    socket.on("preview-stopped", (data) => {
-      console.log("Preview dihentikan:", data);
-      setIsPreviewActive(false);
-      setPreviewImage(null);
-      setMjpegStreamUrl(null);
-      // Reset flag jika preview dihentikan oleh server
-      setIsStartingPreview(false);
-    });
-
-    socket.on("preview-error", (data) => {
-      console.error("Preview error:", data.error);
-      setIsPreviewActive(false);
-      setPreviewImage(null);
-      alert("Error preview: " + data.error);
-    });
-
-    socket.on("mjpeg-stream-started", (data) => {
-      console.log("MJPEG stream dimulai:", data);
-      if (data.success) {
-        // Use the URL with timestamp from server
-        setMjpegStreamUrl(data.streamUrl);
-        setMjpegBust(Date.now());
-        setIsPreviewActive(true);
-        // Clear current photo when MJPEG stream starts to prioritize live preview
-        appState.value = {
-          ...appState.value,
-          currentPhoto: null,
-        };
-      }
-      // Reset flag ketika MJPEG stream berhasil dimulai
-      setIsStartingPreview(false);
-    });
-
-    socket.on("mjpeg-stream-stopped", (data) => {
-      console.log("MJPEG stream dihentikan:", data);
-      setMjpegStreamUrl(null);
-      setMjpegBust(0);
-      setIsPreviewActive(false);
-      setPreviewImage(null);
-      // Reset flag jika stream dihentikan oleh server
-      setIsStartingPreview(false);
-    });
-
-    socket.on("effect-changed", (data) => {
-      console.log("Efek diubah:", data);
-      if (data.success) {
-        setCurrentEffect(data.effect);
-        // Convert backend params (uppercase) to frontend params (lowercase)
-        const convertedParams = {
-          intensity: data.params?.Intensity || data.params?.intensity || 0.5,
-          radius: data.params?.Radius || data.params?.radius || 1.0,
-          pixelSize: data.params?.PixelSize || data.params?.pixelSize || 10,
-        };
-        setEffectParams(convertedParams);
-        console.log("Effect params converted:", convertedParams);
-      }
+    socket.on("capture_complete", (data) => {
+      console.log("Capture complete:", data);
+      loadPhotos();
     });
 
     return () => {
       socket.off("connect");
       socket.off("disconnect");
-      socket.off("photoCaptured");
-      socket.off("photoDeleted");
-      socket.off("previewFrame");
-      socket.off("preview-started");
-      socket.off("preview-stopped");
-      socket.off("preview-error");
-      socket.off("mjpeg-stream-started");
-      socket.off("mjpeg-stream-stopped");
-      socket.off("photo-captured");
-      socket.off("effect-changed");
+      socket.off("connect_error");
+      socket.off("preview_frame");
+      socket.off("capture_complete");
     };
   }, []);
 
-  const checkCameraStatus = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/status`);
-      const data = await response.json();
-      appState.value = {
-        ...appState.value,
-        cameraConnected: data.cameraConnected,
-      };
-    } catch (error) {
-      console.error("Error checking camera status:", error);
-    }
-  };
+  const handleStartPreview = async () => {
+    if (isStartingPreview || isPreviewActive) return;
 
-  const loadPhotos = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/photos`);
-      const data = await response.json();
-      appState.value = {
-        ...appState.value,
-        photos: data.photos,
-      };
-    } catch (error) {
-      console.error("Error loading photos:", error);
-    }
-  };
-
-  const capturePhoto = async () => {
-    if (appState.value.isCapturing) return;
-
-    try {
-      // Pastikan preview dan MJPEG stream dihentikan sebelum capture
-      socket.emit("stop-preview");
-      socket.emit("stop-mjpeg"); // custom event to ensure MJPEG dihentikan (jika diperlukan)
-
-      // Bersihkan state preview
-      setPreviewImage(null);
-      setMjpegStreamUrl(null);
-      setIsPreviewActive(false);
-
-      appState.value = {
-        ...appState.value,
-        isCapturing: true,
-        countdown: 3,
-      };
-
-      // Countdown animation
-      for (let i = 3; i > 0; i--) {
-        appState.value = {
-          ...appState.value,
-          countdown: i,
-        };
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-
-      appState.value = {
-        ...appState.value,
-        countdown: 0,
-      };
-
-      // Use socket untuk capture foto
-      socket.emit("capture-photo");
-    } catch (error) {
-      console.error("Error capturing photo:", error);
-      appState.value = {
-        ...appState.value,
-        isCapturing: false,
-        countdown: 0,
-      };
-      alert("Gagal mengambil foto: " + error.message);
-    }
-  };
-
-  const deletePhoto = async (filename) => {
-    try {
-      console.log("🗑️ Menghapus foto:", filename);
-      const response = await fetch(`${API_URL}/api/photos/${filename}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`
-        );
-      }
-
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || "Gagal menghapus foto");
-      }
-
-      console.log("✅ Foto berhasil dihapus:", filename);
-      // Note: Photo list will be updated automatically via socket.io event
-    } catch (error) {
-      console.error("❌ Error deleting photo:", error);
-      alert("Gagal menghapus foto: " + error.message);
-    }
-  };
-
-  const selectPhoto = (photo) => {
-    appState.value = {
-      ...appState.value,
-      currentPhoto: photo,
-    };
-  };
-
-  const startPreview = () => {
-    if (!appState.value.cameraConnected) {
-      alert("Kamera tidak terhubung");
-      return;
-    }
-
-    // Jika preview sedang dalam proses start, abaikan klik lagi
-    if (isStartingPreview) {
-      return;
-    }
     setIsStartingPreview(true);
-
-    // 1️⃣ Pastikan preview sebelumnya dihentikan sepenuhnya
-    socket.emit("stop-preview");
-    // Bersihkan state UI
-    setMjpegStreamUrl(null);
-    setPreviewImage(null);
-    setIsPreviewActive(false);
-
-    // 2️⃣ Tunggu singkat agar server selesai menutup stream lama
-    setTimeout(() => {
-      // Mulai preview kembali
-      socket.emit("start-preview");
-    }, 300); // 300 ms cukup untuk cleanup
-  };
-
-  const stopPreview = () => {
-    socket.emit("stop-preview");
-    // Pastikan MJPEG stream juga dihentikan bila masih aktif
-    socket.emit("stop-mjpeg");
-    // Reset flag jika user menghentikan preview secara manual
-    setIsStartingPreview(false);
-  };
-
-  const handleEffectChange = (effect, params) => {
-    setCurrentEffect(effect);
-    setEffectParams(params);
+    try {
+      const response = await fetch(`${API_URL}/camera/preview/start`, {
+        method: "POST",
+      });
+      const data = await response.json();
+      if (data.success) {
+        setIsPreviewActive(true);
+        setMjpegStreamUrl(data.streamUrl);
+        setMjpegBust(Date.now());
+      }
+    } catch (error) {
+      console.error("Error starting preview:", error);
+    } finally {
+      setIsStartingPreview(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50">
-      {/* Flash overlay */}
-      {appState.value.flash && (
-        <div className="fixed inset-0 bg-white z-50 animate-flash pointer-events-none" />
-      )}
+    <div className="min-h-screen bg-gradient-to-br from-primary-100 via-primary-50 to-white">
+      <div className="container mx-auto px-6 py-8">
+        {/* Header */}
+        <header className="text-center mb-12">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full mb-4 shadow-lg animate-glow">
+            <svg
+              className="w-10 h-10 text-white"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+              <path
+                fillRule="evenodd"
+                d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </div>
+          <h1 className="text-5xl font-bold mb-4 text-secondary-900 font-poppins animate-float drop-shadow-sm">
+            Digitize your photobooth
+          </h1>
+          <p className="text-lg text-secondary-700 max-w-2xl mx-auto leading-relaxed drop-shadow-sm">
+            Experience live preview, instant effects, and easy captures with our
+            modern photobooth solution. Perfect for creating memorable moments
+            with style.
+          </p>
+        </header>
 
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-                <svg
-                  className="w-5 h-5 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-              </div>
-              <h1 className="text-xl font-bold text-gray-900">BootBooth</h1>
+        {/* Status Indicators */}
+        <div className="flex justify-center mb-8">
+          <div className="flex items-center space-x-6 bg-white/80 backdrop-blur-md rounded-2xl px-8 py-4 shadow-soft-lg border border-primary-200">
+            <div className="flex items-center space-x-2">
+              <div
+                className={`w-3 h-3 rounded-full ${
+                  socketConnected ? "bg-green-500" : "bg-red-500"
+                } animate-pulse`}
+              ></div>
+              <span className="text-secondary-900 font-medium">
+                Server: {socketConnected ? "Aktif" : "Tidak Aktif"}
+              </span>
             </div>
-            <StatusIndicator
-              cameraConnected={appState.value.cameraConnected}
-              socketConnected={socketConnected}
-            />
+            <div className="flex items-center space-x-2">
+              <div
+                className={`w-3 h-3 rounded-full ${
+                  isPreviewActive ? "bg-green-500" : "bg-yellow-500"
+                } animate-pulse`}
+              ></div>
+              <span className="text-secondary-900 font-medium">
+                Kamera: {isPreviewActive ? "Terhubung" : "Menghubungkan"}
+              </span>
+            </div>
           </div>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Camera View */}
-          <div className="lg:col-span-2 space-y-6">
-            <CameraView
-              isCapturing={appState.value.isCapturing}
-              countdown={appState.value.countdown}
-              currentPhoto={appState.value.currentPhoto}
-              previewImage={previewImage}
-              isPreviewActive={isPreviewActive}
-              mjpegStreamUrl={mjpegStreamUrl}
-              mjpegBust={mjpegBust}
-              currentEffect={currentEffect}
-              effectParams={effectParams}
-            />
-            <Controls
-              onCapture={capturePhoto}
-              isCapturing={appState.value.isCapturing}
-              cameraConnected={appState.value.cameraConnected}
-              onStartPreview={startPreview}
-              onStopPreview={stopPreview}
-              isPreviewActive={isPreviewActive}
-            />
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+          {/* Main Preview Area */}
+          <div className="xl:col-span-3">
+            <div className="bg-white/85 backdrop-blur-md rounded-3xl p-8 shadow-soft-lg border border-primary-200">
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-semibold text-secondary-900 mb-2 font-poppins drop-shadow-sm">
+                  Live Preview
+                </h2>
+                <p className="text-secondary-700">
+                  See your photobooth in real-time
+                </p>
+              </div>
+
+              {/* Preview Frame */}
+              <div className="relative bg-gradient-to-br from-primary-50 to-primary-100 rounded-2xl p-4 mb-6 shadow-soft">
+              <div className="bg-secondary-900 rounded-xl overflow-hidden shadow-2xl">
+                <CameraView
+                  previewImage={previewImage}
+                  mjpegStreamUrl={mjpegStreamUrl}
+                  mjpegBust={mjpegBust}
+                  isPreviewActive={isPreviewActive}
+                  currentEffect={currentEffect}
+                  effectParams={effectParams}
+                  onChangeEffect={(key) => setCurrentEffect(key)}
+                />
+              </div>
+            </div>
+
+            {/* Start Preview Button */}
+            <div className="text-center">
+              <button
+                onClick={handleStartPreview}
+                disabled={isStartingPreview || isPreviewActive}
+                className={`inline-flex items-center justify-center px-8 py-4 rounded-full font-semibold text-lg transition-all transform hover:scale-105 shadow-soft-lg ${
+                  isPreviewActive
+                    ? "bg-gradient-to-r from-green-400 to-green-600 text-white cursor-not-allowed"
+                    : "bg-gradient-to-r from-primary-200 via-primary-400 to-primary-500 text-white hover:from-primary-300 hover:via-primary-500 hover:to-primary-600 shadow-soft-lg"
+                }`}
+              >
+                  {isStartingPreview ? (
+                    <>
+                      <svg
+                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                      Starting...
+                    </>
+                  ) : isPreviewActive ? (
+                    <>
+                      <svg
+                        className="w-5 h-5 mr-2"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      Preview Active
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="w-5 h-5 mr-2"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      Start Preview
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
 
-          {/* Sidebar */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Effect Controls */}
-            <EffectControls
-              socket={socket}
-              onEffectChange={handleEffectChange}
-            />
+          {/* Effects Panel removed: controls moved into floating overlay in CameraView */}
+        </div>
 
-            {/* Photo Gallery */}
+        {/* Photo Gallery Section */}
+        <div className="mt-12">
+          <div className="bg-white/85 backdrop-blur-md rounded-3xl p-8 shadow-soft-lg border border-primary-200">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-semibold text-secondary-900 mb-2 font-poppins drop-shadow-sm">
+                Recent Captures
+              </h2>
+              <p className="text-secondary-700">Your memorable moments</p>
+            </div>
             <PhotoGallery
-              photos={appState.value.photos}
-              onSelectPhoto={selectPhoto}
-              onDeletePhoto={deletePhoto}
-              currentPhoto={appState.value.currentPhoto}
+              photos={photos}
+              currentPhoto={currentPhoto}
+              onSelectPhoto={(p) => setCurrentPhoto(p)}
+              onDeletePhoto={async (filename) => {
+                try {
+                  const resp = await fetch(`${API_URL}/api/photos/${filename}`, { method: "DELETE" });
+                  if (resp.ok) {
+                    setPhotos((prev) => prev.filter((ph) => ph.Filename !== filename));
+                    if (currentPhoto?.Filename === filename) setCurrentPhoto(null);
+                  }
+                } catch (e) {
+                  console.error("Delete failed", e);
+                }
+              }}
             />
-          </div>
-        </div>
-      </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 mt-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="text-center text-sm text-gray-500">
-            BootBooth Photobooth - Powered by Node.js & Preact
+            {/* Layout & Print */}
+            <div className="mt-8">
+              <h3 className="text-xl font-semibold text-secondary-900 mb-4">Layout & Print (4R)</h3>
+              <div className="space-y-6">
+                  <div className="bg-white/80 backdrop-blur-md rounded-2xl p-6 border border-primary-200 shadow-soft">
+                    <p className="text-secondary-800 mb-4">
+                      Pilih layout. Jika belum memilih foto, akan ditampilkan template preview.
+                    </p>
+                    <div className="max-w-xl mx-auto">
+                      {/* Lazy import to avoid circular */}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white/80 backdrop-blur-md rounded-2xl p-6 border border-primary-200 shadow-soft">
+                      <p className="text-secondary-800 mb-3">Pilih Layout</p>
+                      <LayoutPicker
+                        selectedLayout={selectedLayout}
+                        onPick={(id) => setSelectedLayout(id)}
+                      />
+                    </div>
+                    <div>
+                      <PrintComposer
+                        photo={currentPhoto}
+                        layoutId={selectedLayout}
+                        onComposed={(url) => setComposedUrl(url)}
+                      />
+                    </div>
+                  </div>
+              </div>
+            </div>
           </div>
         </div>
-      </footer>
+      </div>
     </div>
   );
+}
+
+// Helper functions
+async function checkCameraStatus() {
+  try {
+    const response = await fetch(`${API_URL}/api/status`);
+    const data = await response.json();
+    console.log("Camera status:", data);
+  } catch (error) {
+    console.error("Error checking camera status:", error);
+  }
+}
+
+async function loadPhotos(setter) {
+  try {
+    const response = await fetch(`${API_URL}/api/photos`);
+    const data = await response.json();
+    console.log("Loaded photos:", data);
+    if (Array.isArray(data)) setter(data);
+  } catch (error) {
+    console.error("Error loading photos:", error);
+  }
 }

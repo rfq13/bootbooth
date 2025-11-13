@@ -7,7 +7,7 @@ export default function Controls({
   isPreviewActive,
 }) {
   return (
-    <div className="mt-6 bg-white rounded-xl shadow-lg p-6">
+    <div className="mt-6 bg-white/80 backdrop-blur-md rounded-2xl p-6 shadow-lg border border-white/20">
       <div className="flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0">
         {/* Main Capture Button */}
         <div className="flex items-center space-x-4">
@@ -17,16 +17,13 @@ export default function Controls({
               onStopPreview();
             }}
             disabled={isCapturing || !cameraConnected}
-            className={`
-              relative group transition-all duration-200 transform
-              ${
-                isCapturing || !cameraConnected
-                  ? "bg-gray-300 cursor-not-allowed scale-95"
-                  : "bg-primary-600 hover:bg-primary-700 hover:scale-105 active:scale-95"
-              }
-            `}
+            className={`btn-gradient rounded-full px-8 py-4 text-white font-semibold shadow-lg transition-all duration-200 transform ${
+              isCapturing || !cameraConnected
+                ? "opacity-50 cursor-not-allowed grayscale"
+                : "hover:scale-105 active:scale-95"
+            }`}
           >
-            <div className="flex items-center space-x-3 px-8 py-4">
+            <div className="flex items-center space-x-3">
               {isCapturing ? (
                 <>
                   <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -37,7 +34,7 @@ export default function Controls({
               ) : (
                 <>
                   <svg
-                    className="w-8 h-8 text-white"
+                className="w-7 h-7 text-gray-800"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -77,16 +74,16 @@ export default function Controls({
                 cameraConnected ? "bg-green-500 animate-pulse" : "bg-red-500"
               }`}
             ></div>
-            <p className="text-xs text-gray-500 font-medium">
+            <p className="text-xs text-white/70 font-medium">
               {cameraConnected ? "Kamera Terhubung" : "Kamera Tidak Terhubung"}
             </p>
           </div>
 
           <div className="text-center">
-            <div className="text-2xl font-bold text-gray-900">
+            <div className="text-2xl font-bold text-white">
               {isCapturing ? "⏳" : "📸"}
             </div>
-            <p className="text-xs text-gray-500 font-medium">
+            <p className="text-xs text-white/70 font-medium">
               {isCapturing ? "Proses..." : "Siap"}
             </p>
           </div>
@@ -98,16 +95,13 @@ export default function Controls({
           <button
             onClick={isPreviewActive ? onStopPreview : onStartPreview}
             disabled={!cameraConnected}
-            className={`
-             p-3 rounded-lg transition-colors flex flex-col items-center justify-center min-w-[80px]
-             ${
-               !cameraConnected
-                 ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                 : isPreviewActive
-                 ? "bg-red-100 text-red-700 hover:bg-red-200"
-                 : "bg-green-100 text-green-700 hover:bg-green-200"
-             }
-           `}
+            className={`rounded-full px-5 py-2 shadow flex flex-col items-center justify-center min-w-[100px] transition-all ${
+              !cameraConnected
+                ? "bg-gray-200/60 text-gray-500 cursor-not-allowed"
+                : isPreviewActive
+                ? "bg-gradient-to-r from-red-400 to-rose-300 text-gray-800 hover:opacity-90"
+                : "bg-gradient-to-r from-green-300 to-emerald-200 text-gray-800 hover:opacity-90"
+            }`}
             title={isPreviewActive ? "Stop Preview" : "Start Preview"}
           >
             {isPreviewActive ? (
@@ -237,21 +231,13 @@ export default function Controls({
 
       {/* Tips */}
       {cameraConnected && (
-        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="mt-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-100">
           <div className="flex items-center space-x-3">
-            <svg
-              className="w-5 h-5 text-blue-600 flex-shrink-0"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path
-                fillRule="evenodd"
-                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                clipRule="evenodd"
-              />
+            <svg className="w-5 h-5 text-white/80 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
             </svg>
             <div className="flex-1">
-              <p className="text-sm text-blue-800">
+              <p className="text-sm text-white/80">
                 <strong>Tips:</strong> Pastikan pencahayaan cukup dan posisi
                 kamera stabil untuk hasil terbaik.
               </p>
