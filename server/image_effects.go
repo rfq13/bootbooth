@@ -103,7 +103,12 @@ func (ie *ImageEffects) ApplyEffect(jpegData []byte) ([]byte, error) {
     return buf.Bytes(), nil
 }
 
-// Fish Eye Effect - mimics Canon EF 8-15mm f/4L Fisheye USM with EXTREME barrel distortion
+/* Revised Fish Eye Effect – simpler, smoother barrel distortion.
+   This implementation uses a classic fisheye mapping based on
+   normalized radius and an adjustable strength parameter (0‑1).
+   It avoids extreme distortion formulas that caused artifacts
+   and ensures the entire image area is usable without hard
+   black borders. */
 func applyFishEye(img image.Image, params EffectParams) image.Image {
 	bounds := img.Bounds()
 	width := bounds.Dx()
@@ -112,74 +117,73 @@ func applyFishEye(img image.Image, params EffectParams) image.Image {
 
 	centerX := float64(width) / 2
 	centerY := float64(height) / 2
-	
-	// Maximum radius for circular fisheye effect
-	maxRadius := math.Min(centerX, centerY) * 0.95
-	
-	// Fisheye strength: higher = more extreme distortion
-	// Range 1.5 to 3.5 for very strong fisheye effect
-	strength := 1.5 + params.Intensity*2.0
+
+	// Maximum radius for the fisheye effect (circle that fits the image)
+	maxRadius := math.Min(centerX, centerY)
+
+	// Strength controls how strong the barrel distortion is.
+	// 0 = no distortion, 1 = strong fisheye.
+	strength := params.Intensity // value in [0,1]
 
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			// Calculate distance and angle from center
+			// Vector from center to current pixel
 			dx := float64(x) - centerX
 			dy := float64(y) - centerY
-			distance := math.Sqrt(dx*dx + dy*dy)
-			theta := math.Atan2(dy, dx)
+			r := math.Hypot(dx, dy)
 
-			// Normalize distance
-			normDist := distance / maxRadius
+			if r > maxRadius {
+				// Outside the circular region – copy original pixel
+				result.Set(x, y, img.At(x, y))
+				continue
+			}
 
-			var srcX, srcY float64
+			// Normalized radius (0‑1)
+			norm := r / maxRadius
 
-            if normDist <= 1.0 {
-                // Apply EXTREME fisheye distortion
-                // Using inverse mapping: map from distorted to source
-				
-				// Stereographic projection (creates strong barrel distortion)
-				// r_src = 2 * f * tan(r_dst / (2*f))
-				// Simplified: r_src = tan(r_dst * π/4) * scale
-				
-				distortionAngle := normDist * math.Pi / 2.0 * strength / 2.0
-				srcRadius := math.Tan(distortionAngle) / math.Tan(math.Pi/4*strength/2.0) * maxRadius * 1.8
-				
-				// Alternative extreme formula for even stronger effect
-				if params.Intensity > 0.5 {
-					// Exponential distortion for ultra-wide effect
-					srcRadius = maxRadius * math.Pow(normDist, 1.0/strength) * 2.5
-				}
-				
-				srcX = centerX + math.Cos(theta)*srcRadius
-				srcY = centerY + math.Sin(theta)*srcRadius
-            } else {
-                // Outside circle - fill using boundary color to avoid black frame
-                srcX = centerX + math.Cos(theta)*maxRadius
-                srcY = centerY + math.Sin(theta)*maxRadius
-            }
+			// Apply fisheye mapping with a smoother blend between linear
+			// and sinusoidal distortion. This reduces extreme artifacts while
+			// still providing a noticeable barrel effect.
+			// newR = maxRadius * ((1 - strength) * norm + strength * sin(norm * π/2))
+			// strength = 0 → linear (no distortion), strength = 1 → full sin‑based fisheye.
+			newR := maxRadius * ((1 - strength) * norm + strength * math.Sin(norm*math.Pi/2))
 
-			// Sample with bilinear interpolation
-			if srcX >= 1 && srcX < float64(width-2) && srcY >= 1 && srcY < float64(height-2) {
+			// Compute source coordinates using the new radius
+			if r == 0 {
+				// Center pixel stays the same
+				result.Set(x, y, img.At(x, y))
+				continue
+			}
+			scale := newR / r
+			srcX := centerX + dx*scale
+			srcY := centerY + dy*scale
+
+			// Bilinear interpolation for smooth sampling
+			if srcX >= 0 && srcX < float64(width-1) && srcY >= 0 && srcY < float64(height-1) {
 				result.Set(x, y, bilinearInterpolateForFishEye(img, srcX, srcY))
 			} else {
-                // Soft vignette near edges without black bands
-                vignetteStrength := math.Max(0, 1.0-normDist*0.6)
-                if srcX >= 0 && srcX < float64(width) && srcY >= 0 && srcY < float64(height) {
-                    c := img.At(int(srcX), int(srcY))
-                    result.Set(x, y, applyVignetteForFishEye(c, vignetteStrength))
-                } else {
-                    // Clamp to image bounds
-                    ix := int(math.Min(float64(width-1), math.Max(0, srcX)))
-                    iy := int(math.Min(float64(height-1), math.Max(0, srcY)))
-                    result.Set(x, y, img.At(ix, iy))
-                }
-            }
-        }
-    }
+				// Fallback to nearest neighbor if out of bounds
+				ix := int(math.Round(srcX))
+				iy := int(math.Round(srcY))
+				if ix < 0 {
+					ix = 0
+				}
+				if iy < 0 {
+					iy = 0
+				}
+				if ix >= width {
+					ix = width - 1
+				}
+				if iy >= height {
+					iy = height - 1
+				}
+				result.Set(x, y, img.At(ix, iy))
+			}
+		}
+	}
 
-    // Removed hard circular mask to maximize usable area
-
-    return result
+	// No hard mask – the whole image is rendered.
+	return result
 }
 
 // Draw circular mask with soft edge for fisheye effect

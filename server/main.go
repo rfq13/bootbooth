@@ -378,12 +378,36 @@ func main() {
         }
         filename := pathParts[2]
         
-        filePath := filepath.Join(uploadsDir(), filename)
-        if err := os.Remove(filePath); err != nil {
+        // Validate filename to prevent directory traversal
+        if strings.Contains(filename, "..") || strings.Contains(filename, "/") || strings.Contains(filename, "\\") {
+            log.Printf("❌ Invalid filename attempted: %s", filename)
             w.Header().Set("Content-Type", "application/json")
+            w.WriteHeader(http.StatusBadRequest)
+            _ = json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "Filename tidak valid"})
+            return
+        }
+        
+        filePath := filepath.Join(uploadsDir(), filename)
+        
+        // Check if file exists before attempting to delete
+        if _, err := os.Stat(filePath); os.IsNotExist(err) {
+            log.Printf("❌ File not found for deletion: %s", filePath)
+            w.Header().Set("Content-Type", "application/json")
+            w.WriteHeader(http.StatusNotFound)
+            _ = json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "Foto tidak ditemukan"})
+            return
+        }
+        
+        // Attempt to delete the file
+        if err := os.Remove(filePath); err != nil {
+            log.Printf("❌ Failed to delete file %s: %v", filePath, err)
+            w.Header().Set("Content-Type", "application/json")
+            w.WriteHeader(http.StatusInternalServerError)
             _ = json.NewEncoder(w).Encode(map[string]any{"success": false, "error": "Gagal menghapus foto"})
             return
         }
+        
+        log.Printf("✅ Successfully deleted photo: %s", filename)
         
         // Broadcast photo deletion to all clients
         server.BroadcastToNamespace("/", "photoDeleted", map[string]any{"filename": filename})
