@@ -93,6 +93,27 @@
     from { box-shadow: 0 0 10px rgba(232, 211, 186, 0.3); }
     to { box-shadow: 0 0 20px rgba(232, 211, 186, 0.6); }
   }
+
+  /* Shiny gradient animated text */
+  .shiny-text {
+    background-image: linear-gradient(90deg, #8C6B4F, #A08162, #B08F6E, #A08162, #8C6B4F);
+    background-size: 300% 300%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shiny-gradient-shift 6s ease-in-out infinite;
+  }
+
+  @keyframes shiny-gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  /* Ensure both animations run when both classes are present */
+  .shiny-text.animate-float {
+    animation: shiny-gradient-shift 6s ease-in-out infinite, float 6s ease-in-out infinite;
+  }
 }
 
 /* Custom scrollbar */
