@@ -1,5 +1,5 @@
 import { API_URL } from "../constants";
-import { useRef } from "preact/hooks";
+import { useRef, useState, useEffect } from "preact/hooks";
 
 const EFFECT_INFO = {
   none: { name: "Normal", icon: "📷" },
@@ -26,6 +26,7 @@ export default function CameraView({
   onChangeEffect,
 }) {
   const containerRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const handleFullscreen = () => {
     if (document.fullscreenElement) {
@@ -38,19 +39,39 @@ export default function CameraView({
     }
   };
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
   return (
     <div
-      className="relative bg-white/80 backdrop-blur-md rounded-2xl overflow-hidden border border-primary-200 shadow-soft-lg"
+      className={`relative bg-white/80 backdrop-blur-md rounded-2xl overflow-hidden border border-primary-200 shadow-soft-lg ${
+        isFullscreen ? "!rounded-none !border-0" : ""
+      }`}
       ref={containerRef}
     >
-      <div className="aspect-video bg-gradient-to-br from-primary-50 to-primary-100 relative">
+      <div
+        className={`bg-gradient-to-br from-primary-50 to-primary-100 relative ${
+          isFullscreen ? "w-screen h-screen" : "aspect-video h-full"
+        }`}
+      >
         {/* Camera Preview or Current Photo - Preview takes priority over captured photo */}
         {mjpegStreamUrl && isPreviewActive ? (
           <img
             key={`mjpeg-${mjpegBust || 0}`}
             src={`${mjpegStreamUrl}${mjpegBust ? `?t=${mjpegBust}` : ""}`}
             alt="Live MJPEG stream"
-            className="w-full h-full object-contain rounded-xl"
+            className={`w-full h-full ${isFullscreen ? "object-cover" : ""} ${
+              isFullscreen ? "" : "rounded-xl"
+            }`}
             onError={(e) => {
               console.error("MJPEG stream error:", e);
             }}
@@ -59,13 +80,17 @@ export default function CameraView({
           <img
             src={`data:image/jpeg;base64,${previewImage}`}
             alt="Camera Preview"
-            className="w-full h-full object-contain rounded-xl"
+            className={`w-full h-full ${isFullscreen ? "object-cover" : ""} ${
+              isFullscreen ? "" : "rounded-xl"
+            }`}
           />
         ) : currentPhoto ? (
           <img
-            src={`${API_URL}/api/photos/${currentPhoto.Filename}`}
+            src={`${API_URL}/uploads/${currentPhoto.Filename}`}
             alt="Captured Photo"
-            className="w-full h-full object-contain rounded-xl"
+            className={`w-full h-full ${isFullscreen ? "object-cover" : ""} ${
+              isFullscreen ? "" : "rounded-xl"
+            }`}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
@@ -95,7 +120,11 @@ export default function CameraView({
 
         {/* Countdown Overlay */}
         {isCapturing && countdown > 0 && (
-          <div className="absolute inset-0 flex items-center justify-center bg-primary-200/80 backdrop-blur-sm rounded-xl">
+          <div
+            className={`absolute inset-0 flex items-center justify-center bg-primary-200/80 backdrop-blur-sm ${
+              isFullscreen ? "" : "rounded-xl"
+            }`}
+          >
             <div className="text-center">
               <div className="text-8xl font-bold text-secondary-900 animate-countdown drop-shadow-lg">
                 {countdown}
@@ -107,7 +136,11 @@ export default function CameraView({
 
         {/* Capturing Indicator */}
         {isCapturing && countdown === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center bg-primary-100/90 backdrop-blur-sm rounded-xl">
+          <div
+            className={`absolute inset-0 flex items-center justify-center bg-primary-100/90 backdrop-blur-sm ${
+              isFullscreen ? "" : "rounded-xl"
+            }`}
+          >
             <div className="text-center">
               <div className="w-16 h-16 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
               <div className="text-secondary-900 text-lg">Capturing...</div>
@@ -147,18 +180,6 @@ export default function CameraView({
             />
           </svg>
         </button>
-
-        {/* Connection Status */}
-        {!isPreviewActive && !currentPhoto && (
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-            <div className="bg-white/90 backdrop-blur-sm rounded-lg px-4 py-2 text-sm text-secondary-700 shadow-soft">
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
-                <span>Waiting for connection...</span>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Floating Effect Controls */}
         <div className="absolute bottom-4 left-4 right-4 sm:left-6 sm:right-6 flex justify-center sm:justify-between pointer-events-auto">

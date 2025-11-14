@@ -73,69 +73,30 @@ export default function PhotoGallery({
     return (
       <div className="bg-white/80 backdrop-blur-md rounded-2xl p-8 text-center border border-primary-200 shadow-soft">
         <div className="w-16 h-16 mx-auto mb-4 bg-primary-100 rounded-full flex items-center justify-center">
-          <svg className="w-8 h-8 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+          <svg
+            className="w-8 h-8 text-primary-600"
+            fill="currentColor"
+            viewBox="0 0 20 20"
+          >
+            <path
+              fillRule="evenodd"
+              d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"
+              clipRule="evenodd"
+            />
           </svg>
         </div>
-        <h3 className="text-lg font-semibold text-secondary-900 mb-2">No Photos Yet</h3>
-        <p className="text-secondary-600">Start capturing memories with your photobooth!</p>
+        <h3 className="text-lg font-semibold text-secondary-900 mb-2">
+          No Photos Yet
+        </h3>
+        <p className="text-secondary-600">
+          Start capturing memories with your photobooth!
+        </p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Current Photo Display */}
-      {currentPhoto && (
-        <div className="bg-white/80 backdrop-blur-md rounded-2xl p-6 border border-primary-200 shadow-soft">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-secondary-900">Current Photo</h3>
-            <button
-              onClick={() => onSelectPhoto(null)}
-              className="text-secondary-500 hover:text-secondary-700 transition-colors p-1 rounded-full hover:bg-primary-50"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
-          </div>
-          <div className="relative group rounded-xl overflow-hidden shadow-soft-lg">
-            <img
-              src={`${API_URL}${currentPhoto.Path}`}
-              alt="Current photo"
-              className="w-full h-64 object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-              <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center">
-                <span className="text-white text-sm font-medium drop-shadow-sm">
-                  {formatDate(currentPhoto.Timestamp)}
-                </span>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => handleDownload(currentPhoto)}
-                    className="bg-white/20 backdrop-blur-sm text-white p-2 rounded-lg hover:bg-white/30 transition-colors shadow-soft"
-                    title="Download"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => onDeletePhoto(currentPhoto.Filename)}
-                    className="bg-red-500/20 backdrop-blur-sm text-red-300 p-2 rounded-lg hover:bg-red-500/30 transition-colors shadow-soft"
-                    title="Delete"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Photo Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {photos.map((photo) => (
@@ -143,8 +104,8 @@ export default function PhotoGallery({
             key={photo.Filename}
             className={`relative group cursor-pointer rounded-xl overflow-hidden transition-all duration-300 shadow-soft hover:shadow-soft-lg ${
               currentPhoto?.Filename === photo.Filename
-                ? 'ring-2 ring-primary-500 shadow-lg'
-                : 'hover:scale-105'
+                ? "ring-2 ring-primary-500 shadow-lg"
+                : "hover:scale-105"
             }`}
             onClick={() => onSelectPhoto(photo)}
           >
@@ -152,8 +113,16 @@ export default function PhotoGallery({
               {hasImageError(photo.Filename) ? (
                 <div className="w-full h-full flex items-center justify-center">
                   <div className="text-center text-secondary-500">
-                    <svg className="w-8 h-8 mx-auto mb-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                    <svg
+                      className="w-8 h-8 mx-auto mb-2"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                     <p className="text-xs">Error loading</p>
                   </div>
@@ -163,19 +132,23 @@ export default function PhotoGallery({
                   data-src={`${API_URL}${photo.Path}`}
                   alt={`Photo ${photo.Filename}`}
                   className={`w-full h-full object-cover transition-opacity duration-300 ${
-                    isImageLoaded(photo.Filename) ? 'opacity-100' : 'opacity-0'
+                    isImageLoaded(photo.Filename) ? "opacity-100" : "opacity-0"
                   }`}
                   onLoad={() => handleImageLoad(photo.Filename)}
                   onError={() => handleImageError(photo.Filename)}
                   ref={(el) => {
-                    if (el && observerRef.current && !isImageLoaded(photo.Filename)) {
+                    if (
+                      el &&
+                      observerRef.current &&
+                      !isImageLoaded(photo.Filename)
+                    ) {
                       observerRef.current.observe(el);
                     }
                   }}
                 />
               )}
             </div>
-            
+
             {/* Hover Overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
               <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center">
@@ -191,8 +164,16 @@ export default function PhotoGallery({
                     className="bg-white/20 backdrop-blur-sm text-white p-1 rounded hover:bg-white/30 transition-colors shadow-soft"
                     title="Download"
                   >
-                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                    <svg
+                      className="w-3 h-3"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                   </button>
                   <button
@@ -203,8 +184,16 @@ export default function PhotoGallery({
                     className="bg-red-500/20 backdrop-blur-sm text-red-300 p-1 rounded hover:bg-red-500/30 transition-colors shadow-soft"
                     title="Delete"
                   >
-                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                    <svg
+                      className="w-3 h-3"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                   </button>
                 </div>
