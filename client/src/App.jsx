@@ -22,6 +22,7 @@ const socket = io(SOCKET_URL, {
 
 export default function App() {
   const [socketConnected, setSocketConnected] = useState(false);
+  const [cameraConnected, setCameraConnected] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
   const [isPreviewActive, setIsPreviewActive] = useState(false);
   const [mjpegStreamUrl, setMjpegStreamUrl] = useState(null);
@@ -29,6 +30,8 @@ export default function App() {
   const [currentEffect, setCurrentEffect] = useState("none");
   const [effectParams, setEffectParams] = useState({});
   const [isStartingPreview, setIsStartingPreview] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [countdown, setCountdown] = useState(0);
   const [photos, setPhotos] = useState([]);
   const [currentPhoto, setCurrentPhoto] = useState(null);
   const [selectedLayout, setSelectedLayout] = useState("single_4R");
@@ -37,6 +40,31 @@ export default function App() {
   const [songArtist, setSongArtist] = useState("The 1975");
   const [showLayoutPage, setShowLayoutPage] = useState(false);
 
+  const checkCameraStatus = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/status`);
+      const data = await response.json();
+      console.log("Camera status:", data);
+      // Update camera connected state
+      if (data.cameraConnected !== undefined) {
+        setCameraConnected(data.cameraConnected);
+        // Also update global state
+        appState.value = {
+          ...appState.value,
+          cameraConnected: data.cameraConnected,
+        };
+      }
+    } catch (error) {
+      console.error("Error checking camera status:", error);
+      setCameraConnected(false);
+      // Also update global state
+      appState.value = {
+        ...appState.value,
+        cameraConnected: false,
+      };
+    }
+  };
+
   useEffect(() => {
     checkCameraStatus();
     loadPhotos(setPhotos);
@@ -44,6 +72,8 @@ export default function App() {
     socket.on("connect", () => {
       setSocketConnected(true);
       console.log("Terhubung ke server");
+      // Check camera status when connected
+      checkCameraStatus();
     });
 
     socket.on("disconnect", (reason) => {
@@ -56,45 +86,212 @@ export default function App() {
       setSocketConnected(false);
     });
 
-    socket.on("preview_frame", (data) => {
+    socket.on("reconnect", (attemptNumber) => {
+      console.log("Reconnected to server after", attemptNumber, "attempts");
+      setSocketConnected(true);
+      // Check camera status when reconnected
+      checkCameraStatus();
+    });
+
+    socket.on("previewFrame", (data) => {
       if (data.image) {
         setPreviewImage(data.image);
       }
     });
 
-    socket.on("capture_complete", (data) => {
-      console.log("Capture complete:", data);
-      loadPhotos();
+    socket.on("photoCaptured", (data) => {
+      console.log("Foto diambil:", data);
+      // Update photos list
+      loadPhotos(setPhotos);
+      // Update global state
+      appState.value = {
+        ...appState.value,
+        photos: [data, ...appState.value.photos],
+        currentPhoto: data,
+        isCapturing: false,
+        flash: true,
+      };
+
+      // Remove flash effect after animation
+      setTimeout(() => {
+        appState.value = {
+          ...appState.value,
+          flash: false,
+        };
+      }, 300);
+    });
+
+    socket.on("photoDeleted", (data) => {
+      console.log("Foto dihapus:", data);
+      // Update photos list
+      loadPhotos(setPhotos);
+      // Update global state
+      appState.value = {
+        ...appState.value,
+        photos: appState.value.photos.filter(
+          (photo) => photo.Filename !== data.filename
+        ),
+      };
+
+      // If the deleted photo was the current photo, clear it
+      if (
+        appState.value.currentPhoto &&
+        appState.value.currentPhoto.Filename === data.filename
+      ) {
+        appState.value = {
+          ...appState.value,
+          currentPhoto: null,
+        };
+      }
+    });
+
+    socket.on("preview-started", (data) => {
+      console.log("Preview dimulai:", data);
+      if (data.success) {
+        setIsPreviewActive(true);
+        setMjpegBust(Date.now());
+        // Clear current photo when preview starts to prioritize live preview
+        appState.value = {
+          ...appState.value,
+          currentPhoto: null,
+        };
+      }
+    });
+
+    socket.on("preview-stopped", (data) => {
+      console.log("Preview dihentikan:", data);
+      setIsPreviewActive(false);
+      setPreviewImage(null);
+      setMjpegStreamUrl(null);
+    });
+
+    socket.on("mjpeg-stream-started", (data) => {
+      console.log("MJPEG stream dimulai:", data);
+      if (data.success) {
+        setMjpegStreamUrl(data.streamUrl);
+        setMjpegBust(Date.now());
+        setIsPreviewActive(true);
+        // Clear current photo when MJPEG stream starts to prioritize live preview
+        appState.value = {
+          ...appState.value,
+          currentPhoto: null,
+        };
+      }
+    });
+
+    socket.on("mjpeg-stream-stopped", (data) => {
+      console.log("MJPEG stream dihentikan:", data);
+      setMjpegStreamUrl(null);
+      setMjpegBust(0);
+      setIsPreviewActive(false);
+      setPreviewImage(null);
+    });
+
+    socket.on("camera-detected", (data) => {
+      console.log("Kamera terdeteksi:", data);
+      if (data.success !== undefined) {
+        setCameraConnected(data.success);
+        // Update global state
+        appState.value = {
+          ...appState.value,
+          cameraConnected: data.success,
+        };
+      }
     });
 
     return () => {
       socket.off("connect");
       socket.off("disconnect");
       socket.off("connect_error");
-      socket.off("preview_frame");
-      socket.off("capture_complete");
+      socket.off("reconnect");
+      socket.off("previewFrame");
+      socket.off("photoCaptured");
+      socket.off("photoDeleted");
+      socket.off("preview-started");
+      socket.off("preview-stopped");
+      socket.off("mjpeg-stream-started");
+      socket.off("mjpeg-stream-stopped");
+      socket.off("camera-detected");
     };
   }, []);
 
-  const handleStartPreview = async () => {
-    if (isStartingPreview || isPreviewActive) return;
+  const handleStartPreview = () => {
+    if (!cameraConnected) {
+      alert("Kamera tidak terhubung");
+      return;
+    }
+
+    if (isStartingPreview || isPreviewActive) {
+      return;
+    }
 
     setIsStartingPreview(true);
-    try {
-      const response = await fetch(`${API_URL}/camera/preview/start`, {
-        method: "POST",
+
+    // Stop any existing preview first
+    socket.emit("stop-preview");
+    socket.emit("stop-mjpeg");
+
+    // Clear preview state
+    setPreviewImage(null);
+    setMjpegStreamUrl(null);
+    setIsPreviewActive(false);
+
+    // Wait a bit then start preview with effect
+    setTimeout(() => {
+      socket.emit("start-preview", {
+        effect: currentEffect,
+        params: effectParams,
       });
-      const data = await response.json();
-      if (data.success) {
-        setIsPreviewActive(true);
-        setMjpegStreamUrl(data.streamUrl);
-        setMjpegBust(Date.now());
-      }
-    } catch (error) {
-      console.error("Error starting preview:", error);
-    } finally {
       setIsStartingPreview(false);
+    }, 300);
+  };
+
+  // Apply effect when changed during preview
+  useEffect(() => {
+    if (isPreviewActive) {
+      socket.emit("apply-effect", {
+        effect: currentEffect,
+        params: effectParams,
+      });
     }
+  }, [currentEffect, effectParams, isPreviewActive]);
+
+  const handleCapturePhoto = () => {
+    if (!cameraConnected || isCapturing) return;
+
+    setIsCapturing(true);
+    setCountdown(3); // 3 second countdown
+
+    const countdownInterval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdownInterval);
+
+          // Capture photo after countdown
+          socket.emit("capture-photo", {
+            effect: currentEffect,
+            params: effectParams,
+          });
+
+          // Reset capturing state after a delay
+          setTimeout(() => {
+            setIsCapturing(false);
+            setCountdown(0);
+          }, 1000);
+
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleStopPreview = () => {
+    socket.emit("stop-preview");
+    socket.emit("stop-mjpeg");
+    setIsPreviewActive(false);
+    setPreviewImage(null);
+    setMjpegStreamUrl(null);
   };
 
   // If layout page is shown, render it instead of the main app
@@ -170,11 +367,11 @@ export default function App() {
             <div className="flex items-center space-x-2">
               <div
                 className={`w-3 h-3 rounded-full ${
-                  isPreviewActive ? "bg-green-500" : "bg-yellow-500"
+                  cameraConnected ? "bg-green-500" : "bg-yellow-500"
                 } animate-pulse`}
               ></div>
               <span className="text-secondary-900 font-medium">
-                Kamera: {isPreviewActive ? "Terhubung" : "Menghubungkan"}
+                Kamera: {cameraConnected ? "Terhubung" : "Tidak Terhubung"}
               </span>
             </div>
           </div>
@@ -182,7 +379,7 @@ export default function App() {
 
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
           {/* Main Preview Area */}
-          <div className="xl:col-span-3">
+          <div className="xl:col-span-4">
             <div className="bg-white/85 backdrop-blur-md rounded-3xl p-8 shadow-soft-lg border border-primary-200">
               <div className="text-center mb-6">
                 <h2 className="text-2xl font-semibold text-secondary-900 mb-2 font-poppins drop-shadow-sm">
@@ -197,6 +394,9 @@ export default function App() {
               <div className="relative bg-gradient-to-br from-primary-50 to-primary-100 rounded-2xl p-4 mb-6 shadow-soft">
                 <div className="bg-secondary-900 rounded-xl overflow-hidden shadow-2xl">
                   <CameraView
+                    isCapturing={isCapturing}
+                    countdown={countdown}
+                    currentPhoto={currentPhoto}
                     previewImage={previewImage}
                     mjpegStreamUrl={mjpegStreamUrl}
                     mjpegBust={mjpegBust}
@@ -212,10 +412,12 @@ export default function App() {
               <div className="text-center">
                 <button
                   onClick={handleStartPreview}
-                  disabled={isStartingPreview || isPreviewActive}
+                  disabled={
+                    isStartingPreview || isPreviewActive || !cameraConnected
+                  }
                   className={`inline-flex items-center justify-center px-8 py-4 rounded-full font-semibold text-lg transition-all transform hover:scale-105 shadow-soft-lg ${
-                    isPreviewActive
-                      ? "bg-gradient-to-r from-green-400 to-green-600 text-white cursor-not-allowed"
+                    isPreviewActive || !cameraConnected
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                       : "bg-gradient-to-r from-primary-200 via-primary-400 to-primary-500 text-white hover:from-primary-300 hover:via-primary-500 hover:to-primary-600 shadow-soft-lg"
                   }`}
                 >
@@ -258,6 +460,21 @@ export default function App() {
                       </svg>
                       Preview Active
                     </>
+                  ) : !cameraConnected ? (
+                    <>
+                      <svg
+                        className="w-5 h-5 mr-2"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      Kamera Tidak Terhubung
+                    </>
                   ) : (
                     <>
                       <svg
@@ -279,7 +496,17 @@ export default function App() {
             </div>
           </div>
 
-          {/* Effects Panel removed: controls moved into floating overlay in CameraView */}
+          {/* Camera Controls - Integrated with Preview Button */}
+          <div className="text-center mt-6">
+            <Controls
+              onCapture={handleCapturePhoto}
+              isCapturing={isCapturing}
+              cameraConnected={cameraConnected}
+              onStartPreview={handleStartPreview}
+              onStopPreview={handleStopPreview}
+              isPreviewActive={isPreviewActive}
+            />
+          </div>
         </div>
 
         {/* Photo Gallery Section */}
@@ -382,22 +609,17 @@ export default function App() {
 }
 
 // Helper functions
-async function checkCameraStatus() {
-  try {
-    const response = await fetch(`${API_URL}/api/status`);
-    const data = await response.json();
-    console.log("Camera status:", data);
-  } catch (error) {
-    console.error("Error checking camera status:", error);
-  }
-}
-
 async function loadPhotos(setter) {
   try {
     const response = await fetch(`${API_URL}/api/photos`);
     const data = await response.json();
     console.log("Loaded photos:", data);
-    if (Array.isArray(data)) setter(data);
+    // Backend returns {photos: [...]}, not direct array
+    if (data.photos && Array.isArray(data.photos)) {
+      setter(data.photos);
+    } else if (Array.isArray(data)) {
+      setter(data);
+    }
   } catch (error) {
     console.error("Error loading photos:", error);
   }

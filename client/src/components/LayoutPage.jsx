@@ -24,7 +24,12 @@ const LayoutPage = ({ onBack }) => {
     try {
       const response = await fetch(`${API_URL}/api/photos`);
       const data = await response.json();
-      if (Array.isArray(data)) setPhotos(data);
+      // Backend returns {photos: [...]}, not direct array
+      if (data.photos && Array.isArray(data.photos)) {
+        setPhotos(data.photos);
+      } else if (Array.isArray(data)) {
+        setPhotos(data);
+      }
     } catch (error) {
       console.error("Error loading photos:", error);
     }
@@ -148,18 +153,34 @@ const LayoutPage = ({ onBack }) => {
           {/* Layout Settings and Preview */}
           <div className="lg:col-span-2">
             <div className="bg-white/85 backdrop-blur-md rounded-3xl p-6 shadow-soft-lg border border-primary-200 mb-6">
-              <h2 className="text-xl font-semibold text-secondary-900 mb-4">Pengaturan Layout</h2>
+              <h2 className="text-xl font-semibold text-secondary-900 mb-4">
+                Pengaturan Layout
+              </h2>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-secondary-700 mb-1">Pilih Jenis Layout</label>
+                <label className="block text-sm font-medium text-secondary-700 mb-1">
+                  Pilih Jenis Layout
+                </label>
                 <div className="flex gap-3">
                   <button
-                    className={`px-3 py-2 rounded-lg border ${layoutType === "ticket" ? "bg-primary-100 border-primary-300" : "bg-white border-primary-200"}`}
+                    className={`px-3 py-2 rounded-lg border ${
+                      layoutType === "ticket"
+                        ? "bg-primary-100 border-primary-300"
+                        : "bg-white border-primary-200"
+                    }`}
                     onClick={() => setLayoutType("ticket")}
-                  >Ticket (Movie)</button>
+                  >
+                    Ticket (Movie)
+                  </button>
                   <button
-                    className={`px-3 py-2 rounded-lg border ${layoutType === "strip" ? "bg-primary-100 border-primary-300" : "bg-white border-primary-200"}`}
+                    className={`px-3 py-2 rounded-lg border ${
+                      layoutType === "strip"
+                        ? "bg-primary-100 border-primary-300"
+                        : "bg-white border-primary-200"
+                    }`}
                     onClick={() => setLayoutType("strip")}
-                  >PhotoStrip (BYD)</button>
+                  >
+                    PhotoStrip (BYD)
+                  </button>
                 </div>
               </div>
 
