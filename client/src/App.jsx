@@ -7,6 +7,7 @@ import Controls from "./components/Controls.jsx";
 import StatusIndicator from "./components/StatusIndicator.jsx";
 import LayoutPicker from "./components/LayoutPicker.jsx";
 import PrintComposer from "./components/PrintComposer.jsx";
+import LayoutPage from "./components/LayoutPage.jsx";
 import { appState } from "./main.jsx";
 import { SOCKET_URL, API_URL } from "./constants";
 
@@ -34,6 +35,7 @@ export default function App() {
   const [composedUrl, setComposedUrl] = useState(null);
   const [songTitle, setSongTitle] = useState("About You");
   const [songArtist, setSongArtist] = useState("The 1975");
+  const [showLayoutPage, setShowLayoutPage] = useState(false);
 
   useEffect(() => {
     checkCameraStatus();
@@ -95,6 +97,11 @@ export default function App() {
     }
   };
 
+  // If layout page is shown, render it instead of the main app
+  if (showLayoutPage) {
+    return <LayoutPage onBack={() => setShowLayoutPage(false)} />;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-100 via-primary-50 to-white">
       <div className="container mx-auto px-6 py-8">
@@ -122,6 +129,29 @@ export default function App() {
             modern photobooth solution. Perfect for creating memorable moments
             with style.
           </p>
+
+          {/* New button to navigate to layout page */}
+          <div className="mt-6">
+            <button
+              onClick={() => setShowLayoutPage(true)}
+              className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-full shadow-lg hover:from-purple-600 hover:to-pink-600 transition-all transform hover:scale-105"
+            >
+              <svg
+                className="w-5 h-5 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              Pilih Layout Foto
+            </button>
+          </div>
         </header>
 
         {/* Status Indicators */}
@@ -165,30 +195,30 @@ export default function App() {
 
               {/* Preview Frame */}
               <div className="relative bg-gradient-to-br from-primary-50 to-primary-100 rounded-2xl p-4 mb-6 shadow-soft">
-              <div className="bg-secondary-900 rounded-xl overflow-hidden shadow-2xl">
-                <CameraView
-                  previewImage={previewImage}
-                  mjpegStreamUrl={mjpegStreamUrl}
-                  mjpegBust={mjpegBust}
-                  isPreviewActive={isPreviewActive}
-                  currentEffect={currentEffect}
-                  effectParams={effectParams}
-                  onChangeEffect={(key) => setCurrentEffect(key)}
-                />
+                <div className="bg-secondary-900 rounded-xl overflow-hidden shadow-2xl">
+                  <CameraView
+                    previewImage={previewImage}
+                    mjpegStreamUrl={mjpegStreamUrl}
+                    mjpegBust={mjpegBust}
+                    isPreviewActive={isPreviewActive}
+                    currentEffect={currentEffect}
+                    effectParams={effectParams}
+                    onChangeEffect={(key) => setCurrentEffect(key)}
+                  />
+                </div>
               </div>
-            </div>
 
-            {/* Start Preview Button */}
-            <div className="text-center">
-              <button
-                onClick={handleStartPreview}
-                disabled={isStartingPreview || isPreviewActive}
-                className={`inline-flex items-center justify-center px-8 py-4 rounded-full font-semibold text-lg transition-all transform hover:scale-105 shadow-soft-lg ${
-                  isPreviewActive
-                    ? "bg-gradient-to-r from-green-400 to-green-600 text-white cursor-not-allowed"
-                    : "bg-gradient-to-r from-primary-200 via-primary-400 to-primary-500 text-white hover:from-primary-300 hover:via-primary-500 hover:to-primary-600 shadow-soft-lg"
-                }`}
-              >
+              {/* Start Preview Button */}
+              <div className="text-center">
+                <button
+                  onClick={handleStartPreview}
+                  disabled={isStartingPreview || isPreviewActive}
+                  className={`inline-flex items-center justify-center px-8 py-4 rounded-full font-semibold text-lg transition-all transform hover:scale-105 shadow-soft-lg ${
+                    isPreviewActive
+                      ? "bg-gradient-to-r from-green-400 to-green-600 text-white cursor-not-allowed"
+                      : "bg-gradient-to-r from-primary-200 via-primary-400 to-primary-500 text-white hover:from-primary-300 hover:via-primary-500 hover:to-primary-600 shadow-soft-lg"
+                  }`}
+                >
                   {isStartingPreview ? (
                     <>
                       <svg
@@ -267,10 +297,16 @@ export default function App() {
               onSelectPhoto={(p) => setCurrentPhoto(p)}
               onDeletePhoto={async (filename) => {
                 try {
-                  const resp = await fetch(`${API_URL}/api/photos/${filename}`, { method: "DELETE" });
+                  const resp = await fetch(
+                    `${API_URL}/api/photos/${filename}`,
+                    { method: "DELETE" }
+                  );
                   if (resp.ok) {
-                    setPhotos((prev) => prev.filter((ph) => ph.Filename !== filename));
-                    if (currentPhoto?.Filename === filename) setCurrentPhoto(null);
+                    setPhotos((prev) =>
+                      prev.filter((ph) => ph.Filename !== filename)
+                    );
+                    if (currentPhoto?.Filename === filename)
+                      setCurrentPhoto(null);
                   }
                 } catch (e) {
                   console.error("Delete failed", e);
@@ -280,51 +316,62 @@ export default function App() {
 
             {/* Layout & Print */}
             <div className="mt-8">
-              <h3 className="text-xl font-semibold text-secondary-900 mb-4">Layout & Print (4R)</h3>
+              <h3 className="text-xl font-semibold text-secondary-900 mb-4">
+                Layout & Print (4R)
+              </h3>
               <div className="space-y-6">
+                <div className="bg-white/80 backdrop-blur-md rounded-2xl p-6 border border-primary-200 shadow-soft">
+                  <p className="text-secondary-800 mb-4">
+                    Pilih layout. Jika belum memilih foto, akan ditampilkan
+                    template preview.
+                  </p>
+                  <div className="max-w-xl mx-auto">
+                    {/* Lazy import to avoid circular */}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div className="bg-white/80 backdrop-blur-md rounded-2xl p-6 border border-primary-200 shadow-soft">
-                    <p className="text-secondary-800 mb-4">
-                      Pilih layout. Jika belum memilih foto, akan ditampilkan template preview.
-                    </p>
-                    <div className="max-w-xl mx-auto">
-                      {/* Lazy import to avoid circular */}
-                    </div>
+                    <p className="text-secondary-800 mb-3">Pilih Layout</p>
+                    <LayoutPicker
+                      selectedLayout={selectedLayout}
+                      onPick={(id) => setSelectedLayout(id)}
+                      onShowLayoutPage={() => setShowLayoutPage(true)}
+                    />
+                    {(selectedLayout === "photostrip_spotify" ||
+                      selectedLayout === "spotify_card") && (
+                      <div className="mt-4 bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-primary-200 shadow-soft">
+                        <p className="text-secondary-800 font-medium mb-3">
+                          Teks Pemutar Musik
+                        </p>
+                        <label className="block text-sm text-secondary-700 mb-1">
+                          Judul Lagu
+                        </label>
+                        <input
+                          className="w-full mb-3 px-3 py-2 rounded-lg border border-primary-200 focus:border-primary-400 outline-none"
+                          value={songTitle}
+                          onInput={(e) => setSongTitle(e.currentTarget.value)}
+                        />
+                        <label className="block text-sm text-secondary-700 mb-1">
+                          Artis
+                        </label>
+                        <input
+                          className="w-full px-3 py-2 rounded-lg border border-primary-200 focus:border-primary-400 outline-none"
+                          value={songArtist}
+                          onInput={(e) => setSongArtist(e.currentTarget.value)}
+                        />
+                      </div>
+                    )}
                   </div>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="bg-white/80 backdrop-blur-md rounded-2xl p-6 border border-primary-200 shadow-soft">
-                      <p className="text-secondary-800 mb-3">Pilih Layout</p>
-                      <LayoutPicker
-                        selectedLayout={selectedLayout}
-                        onPick={(id) => setSelectedLayout(id)}
-                      />
-                      {(selectedLayout === "photostrip_spotify" || selectedLayout === "spotify_card") && (
-                        <div className="mt-4 bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-primary-200 shadow-soft">
-                          <p className="text-secondary-800 font-medium mb-3">Teks Pemutar Musik</p>
-                          <label className="block text-sm text-secondary-700 mb-1">Judul Lagu</label>
-                          <input
-                            className="w-full mb-3 px-3 py-2 rounded-lg border border-primary-200 focus:border-primary-400 outline-none"
-                            value={songTitle}
-                            onInput={(e) => setSongTitle(e.currentTarget.value)}
-                          />
-                          <label className="block text-sm text-secondary-700 mb-1">Artis</label>
-                          <input
-                            className="w-full px-3 py-2 rounded-lg border border-primary-200 focus:border-primary-400 outline-none"
-                            value={songArtist}
-                            onInput={(e) => setSongArtist(e.currentTarget.value)}
-                          />
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <PrintComposer
-                        photo={currentPhoto}
-                        layoutId={selectedLayout}
-                        songTitle={songTitle}
-                        songArtist={songArtist}
-                        onComposed={(url) => setComposedUrl(url)}
-                      />
-                    </div>
+                  <div>
+                    <PrintComposer
+                      photo={currentPhoto}
+                      layoutId={selectedLayout}
+                      songTitle={songTitle}
+                      songArtist={songArtist}
+                      onComposed={(url) => setComposedUrl(url)}
+                    />
                   </div>
+                </div>
               </div>
             </div>
           </div>

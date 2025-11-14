@@ -1,6 +1,6 @@
 import { useEffect } from "preact/hooks";
 
-export default function LayoutPicker({ selectedLayout, onPick }) {
+export default function LayoutPicker({ selectedLayout, onPick, onShowLayoutPage }) {
   const layouts = [
     {
       id: "single_4R",
@@ -22,6 +22,12 @@ export default function LayoutPicker({ selectedLayout, onPick }) {
       name: "Spotify Player Card",
       desc: "Satu foto + bar pemutar musik",
     },
+    {
+      id: "photo_booth_ticket",
+      name: "Photo Booth Ticket",
+      desc: "Layout tiket bioskop dengan 3 foto",
+      special: true,
+    },
   ];
 
   useEffect(() => {
@@ -34,15 +40,20 @@ export default function LayoutPicker({ selectedLayout, onPick }) {
       {layouts.map((l) => (
         <button
           key={l.id}
-          onClick={() => onPick && onPick(l.id)}
+          onClick={() => l.special ? (onShowLayoutPage && onShowLayoutPage()) : (onPick && onPick(l.id))}
           className={`text-left p-4 rounded-2xl border transition-all shadow-soft ${
             selectedLayout === l.id
               ? "bg-gradient-to-r from-primary-400 to-primary-600 text-white border-primary-500"
               : "bg-primary-50 text-secondary-800 hover:bg-primary-100 border-primary-200"
-          }`}
+          } ${l.special ? "bg-gradient-to-r from-purple-100 to-pink-100 border-purple-300 hover:from-purple-200 hover:to-pink-200" : ""}`}
         >
           <div className="font-semibold mb-1">{l.name}</div>
           <div className="text-sm opacity-80">{l.desc}</div>
+          {l.special && (
+            <div className="mt-2 text-xs bg-purple-500 text-white px-2 py-1 rounded-full inline-block">
+              Baru!
+            </div>
+          )}
         </button>
       ))}
     </div>
