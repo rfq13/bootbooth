@@ -248,6 +248,11 @@ export default function App() {
 
   // Apply effect when changed during preview
   useEffect(() => {
+    console.log("APPLYING EFFECT...", {
+      effect: currentEffect,
+      params: effectParams,
+      isPreviewActive,
+    });
     if (isPreviewActive) {
       socket.emit("apply-effect", {
         effect: currentEffect,
@@ -290,6 +295,7 @@ export default function App() {
     setEffectParams(newParams);
 
     // If preview is active, also send the updated params to the server
+    console.log("APPLYING EFFECT...", { newParams, isPreviewActive });
     if (isPreviewActive) {
       socket.emit("apply-effect", {
         effect: currentEffect,

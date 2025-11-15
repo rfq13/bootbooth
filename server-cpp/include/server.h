@@ -279,6 +279,7 @@ public:
     void handleCapturePhotoEvent(int clientSocket);
     void handleSetEffectEvent(int clientSocket, const std::map<std::string, std::string>& data);
     void handleGetEffectEvent(int clientSocket);
+    void handleApplyEffectEvent(int clientSocket, const std::map<std::string, std::string>& data);
     
 private:
     void setupRoutes();
@@ -302,5 +303,6 @@ std::string getCurrentTimestamp();
 bool createDirectories(const std::string& path);
 std::vector<std::string> splitString(const std::string& s, char delimiter);
 std::string urlEncode(const std::string& str);
+void parseJsonObject(const std::string& jsonStr, std::map<std::string, std::string>& result, const std::string& prefix);
 
 #endif // SERVER_H

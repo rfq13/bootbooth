@@ -23,8 +23,8 @@ export default function PhotoGallery({
 
   const handleDownload = (photo) => {
     const link = document.createElement("a");
-    link.href = `${API_URL}${photo.Path}`;
-    link.download = photo.Filename;
+    link.href = `${API_URL}${photo.path}`;
+    link.download = photo.filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -101,16 +101,16 @@ export default function PhotoGallery({
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {photos.map((photo) => (
           <div
-            key={photo.Filename}
+            key={photo.filename}
             className={`relative group cursor-pointer rounded-xl overflow-hidden transition-all duration-300 shadow-soft hover:shadow-soft-lg ${
-              currentPhoto?.Filename === photo.Filename
+              currentPhoto?.filename === photo.filename
                 ? "ring-2 ring-primary-500 shadow-lg"
                 : "hover:scale-105"
             }`}
             onClick={() => onSelectPhoto(photo)}
           >
             <div className="aspect-square bg-gradient-to-br from-primary-50 to-primary-100">
-              {hasImageError(photo.Filename) ? (
+              {hasImageError(photo.filename) ? (
                 <div className="w-full h-full flex items-center justify-center">
                   <div className="text-center text-secondary-500">
                     <svg
@@ -129,18 +129,18 @@ export default function PhotoGallery({
                 </div>
               ) : (
                 <img
-                  data-src={`${API_URL}${photo.Path}`}
-                  alt={`Photo ${photo.Filename}`}
+                  data-src={`${API_URL}${photo.path}`}
+                  alt={`Photo ${photo.filename}`}
                   className={`w-full h-full object-cover transition-opacity duration-300 ${
-                    isImageLoaded(photo.Filename) ? "opacity-100" : "opacity-0"
+                    isImageLoaded(photo.filename) ? "opacity-100" : "opacity-0"
                   }`}
-                  onLoad={() => handleImageLoad(photo.Filename)}
-                  onError={() => handleImageError(photo.Filename)}
+                  onLoad={() => handleImageLoad(photo.filename)}
+                  onError={() => handleImageError(photo.filename)}
                   ref={(el) => {
                     if (
                       el &&
                       observerRef.current &&
-                      !isImageLoaded(photo.Filename)
+                      !isImageLoaded(photo.filename)
                     ) {
                       observerRef.current.observe(el);
                     }
@@ -153,7 +153,7 @@ export default function PhotoGallery({
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
               <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center">
                 <span className="text-white text-xs font-medium truncate drop-shadow-sm">
-                  {formatDate(photo.Timestamp)}
+                  {formatDate(photo.timestamp)}
                 </span>
                 <div className="flex space-x-1">
                   <button
@@ -179,7 +179,7 @@ export default function PhotoGallery({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDeletePhoto(photo.Filename);
+                      onDeletePhoto(photo.filename);
                     }}
                     className="bg-red-500/20 backdrop-blur-sm text-red-300 p-1 rounded hover:bg-red-500/30 transition-colors shadow-soft"
                     title="Delete"

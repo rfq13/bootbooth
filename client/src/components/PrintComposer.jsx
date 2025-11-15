@@ -17,7 +17,13 @@ function drawCover(ctx, img, dx, dy, dw, dh) {
   ctx.drawImage(img, -sx + dx, -sy + dy, cw, ch);
 }
 
-export default function PrintComposer({ photo, layoutId, onComposed, songTitle, songArtist }) {
+export default function PrintComposer({
+  photo,
+  layoutId,
+  onComposed,
+  songTitle,
+  songArtist,
+}) {
   const canvasRef = useRef(null);
   const [dataUrl, setDataUrl] = useState(null);
 
@@ -40,7 +46,13 @@ export default function PrintComposer({ photo, layoutId, onComposed, songTitle, 
     ctx.closePath();
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(dx + dw * 0.75, dy + dh * 0.3, Math.min(dw, dh) * 0.06, 0, Math.PI * 2);
+    ctx.arc(
+      dx + dw * 0.75,
+      dy + dh * 0.3,
+      Math.min(dw, dh) * 0.06,
+      0,
+      Math.PI * 2
+    );
     ctx.fill();
     ctx.restore();
   }
@@ -208,9 +220,32 @@ export default function PrintComposer({ photo, layoutId, onComposed, songTitle, 
 
         // Header waktu
         const d = new Date();
-        const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-        const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-        const headerDate = `${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}`;
+        const dayNames = [
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+        ];
+        const monthNames = [
+          "January",
+          "February",
+          "March",
+          "April",
+          "May",
+          "June",
+          "July",
+          "August",
+          "September",
+          "October",
+          "November",
+          "December",
+        ];
+        const headerDate = `${dayNames[d.getDay()]}, ${
+          monthNames[d.getMonth()]
+        } ${d.getDate()}`;
         const hh = String(d.getHours()).padStart(2, "0");
         const mm = String(d.getMinutes()).padStart(2, "0");
         ctx.fillStyle = "#555";
@@ -298,11 +333,11 @@ export default function PrintComposer({ photo, layoutId, onComposed, songTitle, 
       setDataUrl(url);
       if (onComposed) onComposed(url);
     };
-    if (photo?.Path) {
+    if (photo?.path) {
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.onload = () => proceedDraw(img);
-      img.src = `${API_URL}${photo.Path}`;
+      img.src = `${API_URL}${photo.path}`;
     } else {
       proceedDraw(null);
     }
@@ -313,7 +348,9 @@ export default function PrintComposer({ photo, layoutId, onComposed, songTitle, 
     const res = await fetch(dataUrl);
     const blob = await res.blob();
     const form = new FormData();
-    const filename = `${photo?.Filename?.replace(/\.[^.]+$/, "") || "print"}_${layoutId}.jpg`;
+    const filename = `${
+      photo?.Filename?.replace(/\.[^.]+$/, "") || "print"
+    }_${layoutId}.jpg`;
     form.append("file", blob, filename);
     form.append("layoutId", layoutId);
 
@@ -332,10 +369,15 @@ export default function PrintComposer({ photo, layoutId, onComposed, songTitle, 
 
   return (
     <div className="bg-white/80 backdrop-blur-md rounded-2xl p-6 border border-primary-200 shadow-soft">
-      <h3 className="text-lg font-semibold text-secondary-900 mb-4">Preview Layout (4R)</h3>
+      <h3 className="text-lg font-semibold text-secondary-900 mb-4">
+        Preview Layout (4R)
+      </h3>
       <div className="flex flex-col lg:flex-row gap-6">
         <div className="flex-1">
-          <canvas ref={canvasRef} className="w-full border border-primary-200 rounded-xl shadow-soft" />
+          <canvas
+            ref={canvasRef}
+            className="w-full border border-primary-200 rounded-xl shadow-soft"
+          />
         </div>
         <div className="w-full lg:w-64">
           <button

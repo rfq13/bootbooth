@@ -74,7 +74,7 @@ const LayoutPage = ({ onBack }) => {
   };
 
   const getPhotoUrls = () => {
-    return selectedPhotos.map((photo) => `${API_URL}${photo.Path}`);
+    return selectedPhotos.map((photo) => `${API_URL}${photo.path}`);
   };
 
   return (
@@ -129,7 +129,7 @@ const LayoutPage = ({ onBack }) => {
                     {selectedPhotos.map((photo, index) => (
                       <div key={photo.Filename} className="relative group">
                         <img
-                          src={`${API_URL}${photo.Path}`}
+                          src={`${API_URL}${photo.path}`}
                           alt={`Selected ${index + 1}`}
                           className="w-full h-20 object-cover rounded-lg border-2 border-primary-300"
                         />

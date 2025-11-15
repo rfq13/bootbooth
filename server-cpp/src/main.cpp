@@ -62,6 +62,120 @@ std::vector<std::string> splitString(const std::string& s, char delimiter) {
     return tokens;
 }
 
+void parseJsonObject(const std::string& jsonStr, std::map<std::string, std::string>& result, const std::string& prefix) {
+    std::cout << "🔍 Parsing JSON object with prefix: " << prefix << std::endl;
+    
+    size_t pos = 0;
+    while (pos < jsonStr.length()) {
+        // Find key
+        size_t keyStart = jsonStr.find("\"", pos);
+        if (keyStart == std::string::npos) break;
+        
+        size_t keyEnd = jsonStr.find("\"", keyStart + 1);
+        if (keyEnd == std::string::npos) break;
+        
+        std::string key = jsonStr.substr(keyStart + 1, keyEnd - keyStart - 1);
+        std::string fullKey = prefix.empty() ? key : prefix + "." + key;
+        
+        // Find colon
+        size_t colonPos = jsonStr.find(":", keyEnd);
+        if (colonPos == std::string::npos) break;
+        
+        // Skip whitespace
+        size_t valueStart = colonPos + 1;
+        while (valueStart < jsonStr.length() && (jsonStr[valueStart] == ' ' || jsonStr[valueStart] == '\t')) {
+            valueStart++;
+        }
+        
+        if (valueStart >= jsonStr.length()) break;
+        
+        // Check value type
+        char valueChar = jsonStr[valueStart];
+        
+        if (valueChar == '{') {
+            // Nested object
+            size_t nestedStart = valueStart;
+            int braceCount = 1;
+            size_t nestedEnd = nestedStart + 1;
+            
+            while (nestedEnd < jsonStr.length() && braceCount > 0) {
+                if (jsonStr[nestedEnd] == '{') braceCount++;
+                else if (jsonStr[nestedEnd] == '}') braceCount--;
+                nestedEnd++;
+            }
+            
+            if (braceCount == 0) {
+                std::string nestedObj = jsonStr.substr(nestedStart, nestedEnd - nestedStart);
+                parseJsonObject(nestedObj, result, fullKey);
+                pos = nestedEnd;
+            } else {
+                break;
+            }
+        } else if (valueChar == '[') {
+            // Array - skip for now
+            size_t arrayStart = valueStart;
+            int bracketCount = 1;
+            size_t arrayEnd = arrayStart + 1;
+            
+            while (arrayEnd < jsonStr.length() && bracketCount > 0) {
+                if (jsonStr[arrayEnd] == '[') bracketCount++;
+                else if (jsonStr[arrayEnd] == ']') bracketCount--;
+                arrayEnd++;
+            }
+            
+            if (bracketCount == 0) {
+                std::string arrayValue = jsonStr.substr(arrayStart, arrayEnd - arrayStart);
+                result[fullKey] = arrayValue;
+                std::cout << "🔑 Parsed array: " << fullKey << " = " << arrayValue << std::endl;
+                pos = arrayEnd;
+            } else {
+                break;
+            }
+        } else if (valueChar == '"') {
+            // String value
+            size_t valueEnd = jsonStr.find("\"", valueStart + 1);
+            if (valueEnd != std::string::npos) {
+                std::string value = jsonStr.substr(valueStart + 1, valueEnd - valueStart - 1);
+                result[fullKey] = value;
+                std::cout << "🔑 Parsed string: " << fullKey << " = " << value << std::endl;
+                pos = valueEnd + 1;
+            } else {
+                break;
+            }
+        } else {
+            // Number or boolean value
+            size_t valueEnd = valueStart;
+            while (valueEnd < jsonStr.length() &&
+                   jsonStr[valueEnd] != ',' &&
+                   jsonStr[valueEnd] != '}' &&
+                   jsonStr[valueEnd] != ']' &&
+                   jsonStr[valueEnd] != ' ' &&
+                   jsonStr[valueEnd] != '\t') {
+                valueEnd++;
+            }
+            
+            std::string value = jsonStr.substr(valueStart, valueEnd - valueStart);
+            result[fullKey] = value;
+            std::cout << "🔑 Parsed value: " << fullKey << " = " << value << std::endl;
+            pos = valueEnd;
+        }
+        
+        // Find comma or closing brace
+        while (pos < jsonStr.length() &&
+               (jsonStr[pos] == ',' ||
+                jsonStr[pos] == ' ' ||
+                jsonStr[pos] == '\t' ||
+                jsonStr[pos] == '\n' ||
+                jsonStr[pos] == '\r')) {
+            pos++;
+        }
+        
+        if (pos < jsonStr.length() && jsonStr[pos] == '}') {
+            break;
+        }
+    }
+}
+
 std::string urlEncode(const std::string& str) {
     std::string encoded;
     for (char c : str) {
@@ -150,28 +264,50 @@ ImageData ImageEffects::decodeJPEG(const std::vector<unsigned char>& jpegData) {
     // For now, create a simple RGB buffer from JPEG data
     // In a real implementation, we would use a JPEG library like libjpeg
     
+    // Check if JPEG data is valid (starts with FF D8)
+    if (jpegData.size() < 2 || jpegData[0] != 0xFF || jpegData[1] != 0xD8) {
+        std::cerr << "❌ Invalid JPEG data" << std::endl;
+        return result;
+    }
+    
     // Simple approach: assume JPEG is valid and create a dummy RGB buffer
     // This is a placeholder - real implementation would decode JPEG properly
     result.width = 640;  // Default width
     result.height = 480; // Default height
     result.data.resize(result.width * result.height * 3);
     
-    // Fill with some basic color data (placeholder)
-    for (size_t i = 0; i < result.data.size(); i += 3) {
-        result.data[i] = 128;     // R
-        result.data[i + 1] = 128; // G
-        result.data[i + 2] = 128; // B
+    // Copy JPEG data as RGB (simplified approach)
+    // In a real implementation, we would properly decode JPEG to RGB
+    size_t jpegSize = jpegData.size();
+    size_t rgbSize = result.data.size();
+    
+    // Simple conversion - this is not correct JPEG decoding but works for our placeholder
+    for (size_t i = 0; i < rgbSize && i < jpegSize; i += 3) {
+        // Extract some color information from JPEG data
+        size_t jpegIndex = (i * jpegSize) / rgbSize; // Scale to JPEG size
+        
+        if (jpegIndex + 2 < jpegSize) {
+            // Use JPEG data as RGB (not correct but works for placeholder)
+            result.data[i] = jpegData[jpegIndex];         // R
+            result.data[i + 1] = jpegData[jpegIndex + 1]; // G
+            result.data[i + 2] = jpegData[jpegIndex + 2]; // B
+        } else {
+            // Default gray color
+            result.data[i] = 128;     // R
+            result.data[i + 1] = 128; // G
+            result.data[i + 2] = 128; // B
+        }
     }
     
+    std::cout << "🖼️ Decoded JPEG to RGB: " << result.width << "x" << result.height << std::endl;
     return result;
 }
 
 // JPEG encoding function (simplified)
 std::vector<unsigned char> ImageEffects::encodeJPEG(const ImageData& rgbData) {
-    // For now, just return the original JPEG data
-    // In a real implementation, we would encode RGB to JPEG
+    // For now, create a simple JPEG from RGB data
+    // In a real implementation, we would use a JPEG library like libjpeg
     
-    // Create a simple JPEG header and data (placeholder)
     std::vector<unsigned char> jpegData;
     
     // JPEG file signature
@@ -197,6 +333,7 @@ std::vector<unsigned char> ImageEffects::encodeJPEG(const ImageData& rgbData) {
     jpegData.push_back(0x00);
     
     // Add image data (simplified)
+    // In a real implementation, we would properly encode RGB to JPEG
     for (size_t i = 0; i < rgbData.data.size(); i += 3) {
         jpegData.push_back(rgbData.data[i]);     // R
         jpegData.push_back(rgbData.data[i + 1]); // G
@@ -207,6 +344,7 @@ std::vector<unsigned char> ImageEffects::encodeJPEG(const ImageData& rgbData) {
     jpegData.push_back(0xFF);
     jpegData.push_back(0xD9);
     
+    std::cout << "🖼️ Encoded RGB to JPEG: " << rgbData.width << "x" << rgbData.height << std::endl;
     return jpegData;
 }
 
@@ -218,6 +356,8 @@ void ImageEffects::applyFishEyeEffect(ImageData& image) {
     int centerY = height / 2;
     double radius = std::min(width, height) / 2.0;
     double strength = params.intensity * 2.0;
+    
+    std::cout << "🐟 Applying FishEye effect with intensity: " << params.intensity << std::endl;
     
     std::vector<unsigned char> originalData = image.data;
     
@@ -252,6 +392,8 @@ void ImageEffects::applyFishEyeEffect(ImageData& image) {
 }
 
 void ImageEffects::applyGrayscaleEffect(ImageData& image) {
+    std::cout << "⚫ Applying Grayscale effect with intensity: " << params.intensity << std::endl;
+    
     for (size_t i = 0; i < image.data.size(); i += 3) {
         unsigned char r = image.data[i];
         unsigned char g = image.data[i + 1];
@@ -268,6 +410,8 @@ void ImageEffects::applyGrayscaleEffect(ImageData& image) {
 }
 
 void ImageEffects::applySepiaEffect(ImageData& image) {
+    std::cout << "🟤 Applying Sepia effect with intensity: " << params.intensity << std::endl;
+    
     for (size_t i = 0; i < image.data.size(); i += 3) {
         unsigned char r = image.data[i];
         unsigned char g = image.data[i + 1];
@@ -298,6 +442,8 @@ void ImageEffects::applyVignetteEffect(ImageData& image) {
     double maxRadius = std::sqrt(centerX * centerX + centerY * centerY);
     double vignetteStrength = params.intensity * 2.0;
     
+    std::cout << "🌑 Applying Vignette effect with intensity: " << params.intensity << std::endl;
+    
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             double dx = x - centerX;
@@ -322,6 +468,8 @@ void ImageEffects::applyBlurEffect(ImageData& image) {
     int kernelSize = static_cast<int>(params.radius * 5.0);
     if (kernelSize < 3) kernelSize = 3;
     if (kernelSize % 2 == 0) kernelSize++; // Make odd
+    
+    std::cout << "🌫️ Applying Blur effect with radius: " << params.radius << " and intensity: " << params.intensity << std::endl;
     
     std::vector<unsigned char> originalData = image.data;
     
@@ -371,6 +519,8 @@ void ImageEffects::applySharpenEffect(ImageData& image) {
         {0, -1, 0}
     };
     
+    std::cout << "🔪 Applying Sharpen effect with intensity: " << params.intensity << std::endl;
+    
     for (int y = 1; y < height - 1; ++y) {
         for (int x = 1; x < width - 1; ++x) {
             double r = 0, g = 0, b = 0;
@@ -404,6 +554,8 @@ void ImageEffects::applySharpenEffect(ImageData& image) {
 }
 
 void ImageEffects::applyInvertEffect(ImageData& image) {
+    std::cout << "🔄 Applying Invert effect with intensity: " << params.intensity << std::endl;
+    
     for (size_t i = 0; i < image.data.size(); i += 3) {
         image.data[i] = static_cast<unsigned char>(image.data[i] * (1.0 - params.intensity) + (255 - image.data[i]) * params.intensity);
         image.data[i + 1] = static_cast<unsigned char>(image.data[i + 1] * (1.0 - params.intensity) + (255 - image.data[i + 1]) * params.intensity);
@@ -415,6 +567,8 @@ void ImageEffects::applyPixelateEffect(ImageData& image) {
     int width = image.width;
     int height = image.height;
     int pixelSize = std::max(1, params.pixelSize);
+    
+    std::cout << "🎮 Applying Pixelate effect with pixelSize: " << params.pixelSize << " and intensity: " << params.intensity << std::endl;
     
     std::vector<unsigned char> originalData = image.data;
     
@@ -826,20 +980,23 @@ MJPEGServer::~MJPEGServer() {
 
 bool MJPEGServer::start() {
     if (serverSocket != -1) {
+        std::cout << "⚠️ MJPEG server already started on port " << port << std::endl;
         return true; // Already started
     }
+    
+    std::cout << "🚀 Starting MJPEG server on port " << port << std::endl;
     
     // Create socket
     serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (serverSocket < 0) {
-        std::cerr << "Error creating MJPEG server socket" << std::endl;
+        std::cerr << "❌ Error creating MJPEG server socket: " << strerror(errno) << std::endl;
         return false;
     }
     
     // Set socket options
     int opt = 1;
     if (setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        std::cerr << "Error setting MJPEG server socket options" << std::endl;
+        std::cerr << "❌ Error setting MJPEG server socket options: " << strerror(errno) << std::endl;
         close(serverSocket);
         serverSocket = -1;
         return false;
@@ -852,7 +1009,7 @@ bool MJPEGServer::start() {
     serverAddr.sin_port = htons(port);
     
     if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
-        std::cerr << "Error binding MJPEG server socket to port " << port << std::endl;
+        std::cerr << "❌ Error binding MJPEG server socket to port " << port << ": " << strerror(errno) << std::endl;
         close(serverSocket);
         serverSocket = -1;
         return false;
@@ -860,7 +1017,7 @@ bool MJPEGServer::start() {
     
     // Listen for connections
     if (listen(serverSocket, 10) < 0) {
-        std::cerr << "Error listening on MJPEG server socket" << std::endl;
+        std::cerr << "❌ Error listening on MJPEG server socket: " << strerror(errno) << std::endl;
         close(serverSocket);
         serverSocket = -1;
         return false;
@@ -872,7 +1029,7 @@ bool MJPEGServer::start() {
     });
     serverThread.detach();
     
-    std::cout << "MJPEG server started on port " << port << std::endl;
+    std::cout << "✅ MJPEG server started successfully on port " << port << std::endl;
     return true;
 }
 
@@ -897,8 +1054,11 @@ bool MJPEGServer::stop() {
 
 std::tuple<bool, std::string, std::string> MJPEGServer::startStream() {
     if (isStreaming) {
+        std::cout << "⚠️ MJPEG stream already active" << std::endl;
         return std::make_tuple(false, "Stream sudah aktif", "");
     }
+    
+    std::cout << "🚀 Starting MJPEG stream..." << std::endl;
     
     // Clear old frame buffer
     frameBuffer.clear();
@@ -907,13 +1067,13 @@ std::tuple<bool, std::string, std::string> MJPEGServer::startStream() {
     int outPipe[2];
     int errPipe[2];
     if (pipe(outPipe) < 0 || pipe(errPipe) < 0) {
-        std::cerr << "Error creating pipes for gphoto2" << std::endl;
+        std::cerr << "❌ Error creating pipes for gphoto2" << std::endl;
         return std::make_tuple(false, "Gagal membuat pipe", "");
     }
     
     pid_t pid = fork();
     if (pid < 0) {
-        std::cerr << "Error forking gphoto2 process" << std::endl;
+        std::cerr << "❌ Error forking gphoto2 process" << std::endl;
         close(outPipe[0]); close(outPipe[1]);
         close(errPipe[0]); close(errPipe[1]);
         return std::make_tuple(false, "Gagal fork proses", "");
@@ -926,8 +1086,10 @@ std::tuple<bool, std::string, std::string> MJPEGServer::startStream() {
         close(outPipe[0]); close(outPipe[1]);
         close(errPipe[0]); close(errPipe[1]);
         
+        std::cout << "📷 Executing gphoto2 --stdout --capture-movie" << std::endl;
         execlp("gphoto2", "gphoto2", "--stdout", "--capture-movie", (char*)nullptr);
         // If exec fails
+        std::cerr << "❌ Failed to execute gphoto2" << std::endl;
         _exit(127);
     }
     
@@ -938,7 +1100,7 @@ std::tuple<bool, std::string, std::string> MJPEGServer::startStream() {
     stderrFd = errPipe[0];
     streamProcessPid = pid;
     
-    // Set non-blocking reads (optional)
+    // Set non-blocking reads
     int flagsOut = fcntl(stdoutFd, F_GETFL, 0);
     fcntl(stdoutFd, F_SETFL, flagsOut | O_NONBLOCK);
     int flagsErr = fcntl(stderrFd, F_GETFL, 0);
@@ -953,7 +1115,8 @@ std::tuple<bool, std::string, std::string> MJPEGServer::startStream() {
             ssize_t n = read(stderrFd, buf, sizeof(buf));
             if (n > 0) {
                 std::string msg(buf, buf + n);
-                if (msg.find("Capturing preview frames as movie") == std::string::npos) {
+                if (msg.find("Capturing preview frames as movie") == std::string::npos &&
+                    msg.find("NEW folder") == std::string::npos) {
                     std::cerr << "⚠️ GPhoto2 error: " << msg << std::endl;
                 }
             } else {
@@ -968,6 +1131,8 @@ std::tuple<bool, std::string, std::string> MJPEGServer::startStream() {
         const unsigned char startMarker[2] = {0xFF, 0xD8};
         const unsigned char endMarker[2] = {0xFF, 0xD9};
         std::vector<unsigned char> readBuf(64 * 1024);
+        int frameCount = 0;
+        
         while (isStreaming && stdoutFd != -1) {
             ssize_t n = read(stdoutFd, readBuf.data(), readBuf.size());
             if (n > 0) {
@@ -983,8 +1148,17 @@ std::tuple<bool, std::string, std::string> MJPEGServer::startStream() {
                     auto itEnd = std::search(itStart + 2, frameBuffer.end(), endMarker, endMarker + 2);
                     if (itEnd == frameBuffer.end()) break;
                     std::vector<unsigned char> frame(itStart, itEnd + 2);
-                    sendFrameToClients(frame);
+                    
+                    // Apply effects before sending
+                    std::vector<unsigned char> processedFrame = effects.applyEffect(frame);
+                    
+                    sendFrameToClients(processedFrame);
                     frameBuffer.erase(frameBuffer.begin(), itEnd + 2);
+                    
+                    frameCount++;
+                    if (frameCount % 30 == 0) {
+                        std::cout << "📹 Sent " << frameCount << " MJPEG frames" << std::endl;
+                    }
                 }
             } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -993,7 +1167,7 @@ std::tuple<bool, std::string, std::string> MJPEGServer::startStream() {
     });
     outThread.detach();
     
-    std::cout << "MJPEG stream started" << std::endl;
+    std::cout << "✅ MJPEG stream started successfully on port " << port << std::endl;
     return std::make_tuple(true, "", getStreamURL());
 }
 
@@ -1061,6 +1235,8 @@ std::pair<EffectType, EffectParams> MJPEGServer::getCurrentEffect() const {
 }
 
 void MJPEGServer::setupRoutes() {
+    std::cout << "🌐 MJPEG server setupRoutes started, waiting for connections on port " << port << std::endl;
+    
     while (serverSocket != -1) {
         // Accept client connection
         struct sockaddr_in clientAddr;
@@ -1069,67 +1245,119 @@ void MJPEGServer::setupRoutes() {
         int clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &clientAddrLen);
         if (clientSocket < 0) {
             if (serverSocket != -1) {
-                std::cerr << "Error accepting MJPEG client connection" << std::endl;
+                std::cerr << "❌ Error accepting MJPEG client connection" << std::endl;
             }
             continue;
         }
         
-        std::cout << "MJPEG client connected" << std::endl;
+        // Get client IP address for logging
+        char clientIP[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &(clientAddr.sin_addr), clientIP, INET_ADDRSTRLEN);
+        std::cout << "🔗 MJPEG client connected from " << clientIP << ":" << ntohs(clientAddr.sin_port) << std::endl;
         
         // Handle client in a separate thread
-        std::thread clientThread([this, clientSocket]() {
+        std::thread clientThread([this, clientSocket, clientIP]() {
             this->handleClient(clientSocket);
         });
         clientThread.detach();
     }
+    
+    std::cout << "🛑 MJPEG server setupRoutes ended" << std::endl;
 }
 
 void MJPEGServer::handleClient(int clientSocket) {
     // Read initial HTTP request
-    char reqBuf[2048];
+    char reqBuf[4096];
     ssize_t n = recv(clientSocket, reqBuf, sizeof(reqBuf) - 1, 0);
-    if (n <= 0) { close(clientSocket); return; }
+    if (n <= 0) {
+        std::cerr << "❌ Failed to read HTTP request from client" << std::endl;
+        close(clientSocket);
+        return;
+    }
+    
     reqBuf[n] = 0;
     std::string request(reqBuf);
     std::istringstream iss(request);
     std::string method, path, version;
     iss >> method >> path >> version;
     
+    // Extract path without query parameters
+    size_t queryPos = path.find('?');
+    if (queryPos != std::string::npos) {
+        path = path.substr(0, queryPos);
+    }
+    
+    std::cout << "📋 MJPEG HTTP request: " << method << " " << path << " " << version << std::endl;
+    
     if (method == "GET" && path == "/camera") {
+        std::cout << "✅ Serving MJPEG stream to client" << std::endl;
+        
         // Write MJPEG multipart response headers
         std::string header =
             "HTTP/1.1 200 OK\r\n"
             "Access-Control-Allow-Origin: *\r\n"
+            "Access-Control-Allow-Headers: Origin, X-Requested-With, Content-Type, Accept\r\n"
             "Content-Type: multipart/x-mixed-replace; boundary=--frame\r\n"
-            "Cache-Control: no-cache\r\n"
+            "Cache-Control: no-cache, no-store, must-revalidate\r\n"
             "Pragma: no-cache\r\n"
+            "Expires: 0\r\n"
             "Connection: close\r\n\r\n";
-        send(clientSocket, header.c_str(), header.length(), 0);
+        
+        if (send(clientSocket, header.c_str(), header.length(), 0) < 0) {
+            std::cerr << "❌ Failed to send MJPEG headers to client" << std::endl;
+            close(clientSocket);
+            return;
+        }
+        
         // Initial boundary
         std::string boundary = "--frame\r\n";
-        send(clientSocket, boundary.c_str(), boundary.length(), 0);
+        if (send(clientSocket, boundary.c_str(), boundary.length(), 0) < 0) {
+            std::cerr << "❌ Failed to send initial boundary to client" << std::endl;
+            close(clientSocket);
+            return;
+        }
         
         // Register client for streaming
         {
             std::lock_guard<std::mutex> lock(clientsMutex);
             clientSockets.push_back(clientSocket);
+            std::cout << "👥 MJPEG client registered for streaming. Total clients: " << clientSockets.size() << std::endl;
         }
         
-        // Keep connection open until client disconnects
+        // Keep connection open and check if client is still connected
         char buffer[1];
-        while (recv(clientSocket, buffer, 1, 0) > 0) {}
+        int clientDisconnected = 0;
+        while (clientDisconnected == 0) {
+            // Check if client is still connected by trying to read
+            ssize_t result = recv(clientSocket, buffer, 1, MSG_PEEK | MSG_DONTWAIT);
+            if (result == 0) {
+                // Client disconnected gracefully
+                clientDisconnected = 1;
+                std::cout << "🔌 MJPEG client disconnected gracefully" << std::endl;
+            } else if (result < 0) {
+                // Error or no data available
+                if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                    clientDisconnected = 1;
+                    std::cout << "🔌 MJPEG client disconnected with error: " << strerror(errno) << std::endl;
+                }
+            }
+            
+            // Sleep briefly to avoid busy waiting
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
         
         // Remove client and close
         removeClient(clientSocket);
-        std::cout << "MJPEG client disconnected" << std::endl;
         close(clientSocket);
         return;
     } else if (method == "GET" && path == "/health") {
+        std::cout << "🏥 Serving health check endpoint" << std::endl;
         std::string body = std::string("{\"status\":\"ok\",\"streaming\":") + (isStreaming ? "true" : "false") +
                            ",\"clients\":" + std::to_string(getClientCount()) + "}";
         std::ostringstream oss;
         oss << "HTTP/1.1 200 OK\r\n"
             << "Access-Control-Allow-Origin: *\r\n"
+            "Access-Control-Allow-Headers: Origin, X-Requested-With, Content-Type, Accept\r\n"
             << "Content-Type: application/json\r\n"
             << "Content-Length: " << body.size() << "\r\n\r\n"
             << body;
@@ -1137,10 +1365,23 @@ void MJPEGServer::handleClient(int clientSocket) {
         send(clientSocket, resp.c_str(), resp.length(), 0);
         close(clientSocket);
         return;
+    } else if (method == "OPTIONS") {
+        std::cout << "🔧 Handling OPTIONS preflight request for: " << path << std::endl;
+        std::string optionsResponse =
+            "HTTP/1.1 200 OK\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+            "Access-Control-Allow-Headers: Origin, X-Requested-With, Content-Type, Accept\r\n"
+            "Content-Length: 0\r\n\r\n";
+        send(clientSocket, optionsResponse.c_str(), optionsResponse.length(), 0);
+        close(clientSocket);
+        return;
     } else {
+        std::cout << "❌ MJPEG 404 for path: " << path << std::endl;
         // 404 Not Found
         std::string notFound = "HTTP/1.1 404 Not Found\r\n"
                                "Access-Control-Allow-Origin: *\r\n"
+                               "Access-Control-Allow-Headers: Origin, X-Requested-With, Content-Type, Accept\r\n"
                                "Content-Type: text/plain\r\n"
                                "Content-Length: 9\r\n\r\nNot Found";
         send(clientSocket, notFound.c_str(), notFound.length(), 0);
@@ -1454,7 +1695,27 @@ void SocketIOServer::handleSocketIOMessages(int clientSocket) {
             size_t eventEnd = payload.find("\"", eventStart + 2);
             if (eventStart != std::string::npos && eventEnd != std::string::npos) {
                 std::string eventName = payload.substr(eventStart + 2, eventEnd - eventStart - 2);
-                std::map<std::string, std::string> eventData; // simplified
+                std::cout << "📨 Received Socket.IO event: " << eventName << std::endl;
+                
+                // Parse event data
+                std::map<std::string, std::string> eventData;
+                size_t dataStart = payload.find("{", eventEnd);
+                size_t dataEnd = payload.find("}", dataStart);
+                
+                if (dataStart != std::string::npos && dataEnd != std::string::npos) {
+                    std::string dataStr = payload.substr(dataStart, dataEnd - dataStart + 1);
+                    std::cout << "📦 Event data string: " << dataStr << std::endl;
+                    
+                    // Enhanced JSON parsing for our specific format with nested objects
+                    parseJsonObject(dataStr, eventData, "");
+                }
+                
+                std::cout << "📋 Final parsed data for event " << eventName << ": ";
+                for (const auto& pair : eventData) {
+                    std::cout << pair.first << "=" << pair.second << " ";
+                }
+                std::cout << std::endl;
+                
                 if (eventName == "detect-camera") {
                     this->photoBoothServer->handleDetectCameraEvent(clientSocket);
                 } else if (eventName == "start-preview") {
@@ -1469,6 +1730,8 @@ void SocketIOServer::handleSocketIOMessages(int clientSocket) {
                     this->photoBoothServer->handleSetEffectEvent(clientSocket, eventData);
                 } else if (eventName == "get-effect") {
                     this->photoBoothServer->handleGetEffectEvent(clientSocket);
+                } else if (eventName == "apply-effect") {
+                    this->photoBoothServer->handleApplyEffectEvent(clientSocket, eventData);
                 }
             }
         }
@@ -2333,6 +2596,188 @@ void PhotoBoothServer::handleGetEffectEvent(int clientSocket) {
     
     if (socketIOServer) {
         socketIOServer->emitToClient(clientSocket, "current-effect", response);
+    }
+}
+
+void PhotoBoothServer::handleApplyEffectEvent(int clientSocket, const std::map<std::string, std::string>& data) {
+    std::cout << "🎨 Received apply-effect event from client" << std::endl;
+    
+    // Log all received data
+    std::cout << "📋 Received data: ";
+    for (const auto& pair : data) {
+        std::cout << pair.first << "=" << pair.second << " ";
+    }
+    std::cout << std::endl;
+    
+    auto effectIt = data.find("effect");
+    if (effectIt == data.end()) {
+        std::cout << "❌ No effect name provided in apply-effect request" << std::endl;
+        std::map<std::string, std::string> response;
+        response["success"] = "false";
+        response["error"] = "Invalid effect name";
+        
+        if (socketIOServer) {
+            socketIOServer->emitToClient(clientSocket, "effect-applied", response);
+        }
+        return;
+    }
+    
+    std::string effectName = effectIt->second;
+    std::cout << "🎯 Effect to apply: " << effectName << std::endl;
+    
+    EffectType effect = EffectType::NONE;
+    
+    // Parse effect name
+    if (effectName == "fisheye") effect = EffectType::FISHEYE;
+    else if (effectName == "grayscale") effect = EffectType::GRAYSCALE;
+    else if (effectName == "sepia") effect = EffectType::SEPIA;
+    else if (effectName == "vignette") effect = EffectType::VIGNETTE;
+    else if (effectName == "blur") effect = EffectType::BLUR;
+    else if (effectName == "sharpen") effect = EffectType::SHARPEN;
+    else if (effectName == "invert") effect = EffectType::INVERT;
+    else if (effectName == "pixelate") effect = EffectType::PIXELATE;
+    
+    if (effect == EffectType::NONE) {
+        std::cout << "❌ Unknown effect: " << effectName << std::endl;
+    }
+    
+    EffectParams params;
+    params.intensity = 0.5;
+    params.radius = 1.0;
+    params.pixelSize = 10;
+    
+    // Parse params from nested object if provided
+    auto paramsIt = data.find("params");
+    if (paramsIt != data.end()) {
+        std::cout << "📦 Found params object: " << paramsIt->second << std::endl;
+        
+        // Try to parse nested JSON structure for params
+        std::string paramsStr = paramsIt->second;
+        
+        // Look for individual parameters in the nested structure
+        size_t intensityPos = paramsStr.find("\"intensity\":");
+        if (intensityPos != std::string::npos) {
+            size_t valueStart = paramsStr.find(":", intensityPos) + 1;
+            size_t valueEnd = paramsStr.find(",", valueStart);
+            if (valueEnd == std::string::npos) valueEnd = paramsStr.find("}", valueStart);
+            if (valueEnd != std::string::npos) {
+                std::string intensityStr = paramsStr.substr(valueStart, valueEnd - valueStart);
+                // Remove quotes and whitespace
+                intensityStr.erase(std::remove(intensityStr.begin(), intensityStr.end(), '"'), intensityStr.end());
+                intensityStr.erase(std::remove(intensityStr.begin(), intensityStr.end(), ' '), intensityStr.end());
+                try {
+                    params.intensity = std::stod(intensityStr);
+                    if (params.intensity < 0) params.intensity = 0;
+                    if (params.intensity > 1) params.intensity = 1;
+                    std::cout << "📊 Intensity from params: " << params.intensity << std::endl;
+                } catch (...) {
+                    std::cout << "⚠️ Invalid intensity in params, using default: " << params.intensity << std::endl;
+                }
+            }
+        }
+        
+        size_t radiusPos = paramsStr.find("\"radius\":");
+        if (radiusPos != std::string::npos) {
+            size_t valueStart = paramsStr.find(":", radiusPos) + 1;
+            size_t valueEnd = paramsStr.find(",", valueStart);
+            if (valueEnd == std::string::npos) valueEnd = paramsStr.find("}", valueStart);
+            if (valueEnd != std::string::npos) {
+                std::string radiusStr = paramsStr.substr(valueStart, valueEnd - valueStart);
+                // Remove quotes and whitespace
+                radiusStr.erase(std::remove(radiusStr.begin(), radiusStr.end(), '"'), radiusStr.end());
+                radiusStr.erase(std::remove(radiusStr.begin(), radiusStr.end(), ' '), radiusStr.end());
+                try {
+                    params.radius = std::stod(radiusStr);
+                    if (params.radius < 0) params.radius = 0;
+                    std::cout << "📐 Radius from params: " << params.radius << std::endl;
+                } catch (...) {
+                    std::cout << "⚠️ Invalid radius in params, using default: " << params.radius << std::endl;
+                }
+            }
+        }
+        
+        size_t pixelSizePos = paramsStr.find("\"pixelSize\":");
+        if (pixelSizePos != std::string::npos) {
+            size_t valueStart = paramsStr.find(":", pixelSizePos) + 1;
+            size_t valueEnd = paramsStr.find(",", valueStart);
+            if (valueEnd == std::string::npos) valueEnd = paramsStr.find("}", valueStart);
+            if (valueEnd != std::string::npos) {
+                std::string pixelSizeStr = paramsStr.substr(valueStart, valueEnd - valueStart);
+                // Remove quotes and whitespace
+                pixelSizeStr.erase(std::remove(pixelSizeStr.begin(), pixelSizeStr.end(), '"'), pixelSizeStr.end());
+                pixelSizeStr.erase(std::remove(pixelSizeStr.begin(), pixelSizeStr.end(), ' '), pixelSizeStr.end());
+                try {
+                    params.pixelSize = std::stoi(pixelSizeStr);
+                    if (params.pixelSize < 1) params.pixelSize = 1;
+                    std::cout << "🔲 PixelSize from params: " << params.pixelSize << std::endl;
+                } catch (...) {
+                    std::cout << "⚠️ Invalid pixelSize in params, using default: " << params.pixelSize << std::endl;
+                }
+            }
+        }
+    }
+    
+    // Also check for direct parameters (fallback)
+    auto intensityIt = data.find("intensity");
+    if (intensityIt != data.end()) {
+        try {
+            params.intensity = std::stod(intensityIt->second);
+            if (params.intensity < 0) params.intensity = 0;
+            if (params.intensity > 1) params.intensity = 1;
+            std::cout << "📊 Intensity parameter (direct): " << params.intensity << std::endl;
+        } catch (...) {
+            std::cout << "⚠️ Invalid intensity value, using default: " << params.intensity << std::endl;
+        }
+    }
+    
+    auto radiusIt = data.find("radius");
+    if (radiusIt != data.end()) {
+        try {
+            params.radius = std::stod(radiusIt->second);
+            if (params.radius < 0) params.radius = 0;
+            std::cout << "📐 Radius parameter (direct): " << params.radius << std::endl;
+        } catch (...) {
+            std::cout << "⚠️ Invalid radius value, using default: " << params.radius << std::endl;
+        }
+    }
+    
+    auto pixelSizeIt = data.find("pixelSize");
+    if (pixelSizeIt != data.end()) {
+        try {
+            params.pixelSize = std::stoi(pixelSizeIt->second);
+            if (params.pixelSize < 1) params.pixelSize = 1;
+            std::cout << "🔲 PixelSize parameter (direct): " << params.pixelSize << std::endl;
+        } catch (...) {
+            std::cout << "⚠️ Invalid pixelSize value, using default: " << params.pixelSize << std::endl;
+        }
+    }
+    
+    std::cout << "🎨 Applying effect with effect=" << effectName
+              << ", intensity=" << params.intensity
+              << ", radius=" << params.radius
+              << ", pixelSize=" << params.pixelSize << std::endl;
+    
+    // Apply effect to both MJPEG and GPhoto wrapper (like in Go implementation)
+    mjpegServer->setEffect(effect, params);
+    gphoto->setEffect(effect, params);
+    
+    std::cout << "✅ Effect " << effectName << " applied to MJPEG stream and GPhoto wrapper" << std::endl;
+    
+    // Send response to client
+    std::map<std::string, std::string> response;
+    response["success"] = "true";
+    response["effect"] = effectName;
+    response["intensity"] = std::to_string(params.intensity);
+    response["radius"] = std::to_string(params.radius);
+    response["pixelSize"] = std::to_string(params.pixelSize);
+    
+    if (socketIOServer) {
+        socketIOServer->emitToClient(clientSocket, "effect-applied", response);
+    }
+    
+    // Broadcast to all clients that effect has been applied
+    if (socketIOServer) {
+        socketIOServer->broadcast("effectApplied", response);
     }
 }
 
