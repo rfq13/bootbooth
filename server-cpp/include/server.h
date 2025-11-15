@@ -24,6 +24,8 @@
 #include <sys/stat.h>
 #include <cstring>
 #include <csignal>
+#include <sys/wait.h>
+#include <openssl/sha.h>
 #include <algorithm>
 #include <random>
 
@@ -161,6 +163,8 @@ private:
     std::vector<int> clientSockets;
     mutable std::mutex clientsMutex;
     pid_t streamProcessPid;
+    int stdoutFd;
+    int stderrFd;
     
 public:
     MJPEGServer(int port);
@@ -195,6 +199,7 @@ private:
     std::vector<int> clientSockets;
     mutable std::mutex clientsMutex;
     PhotoBoothServer* photoBoothServer;
+    std::string lastSid;
     
 public:
     SocketIOServer(int port, PhotoBoothServer* photoBoothServer);
@@ -219,6 +224,13 @@ private:
     void closeAllClients();
     void removeClient(int clientSocket);
     std::string generateSocketIOPacket(const std::string& event, const std::map<std::string, std::string>& data);
+    // WebSocket helpers
+    std::string computeWebSocketAccept(const std::string& clientKey);
+    void sendTextFrame(int clientSocket, const std::string& payload);
+    bool recvExact(int clientSocket, char* buf, size_t len);
+    bool recvTextFrame(int clientSocket, std::string& outPayload);
+    std::string base64EncodeBytes(const unsigned char* data, size_t len);
+    std::string generateSID();
     
     // HTTP request handling
     void handleHttpRequest(int clientSocket, const std::string& request);

@@ -815,7 +815,7 @@ std::string GPhotoWrapper::base64Encode(const std::vector<unsigned char>& data) 
 
 // MJPEGServer implementation
 MJPEGServer::MJPEGServer(int port) 
-    : port(port), isStreaming(false), serverSocket(-1), streamProcessPid(-1) {
+    : port(port), isStreaming(false), serverSocket(-1), streamProcessPid(-1), stdoutFd(-1), stderrFd(-1) {
     // Initialize frame buffer
     frameBuffer.reserve(1024 * 512); // 512KB initial capacity
 }
@@ -904,8 +904,94 @@ std::tuple<bool, std::string, std::string> MJPEGServer::startStream() {
     frameBuffer.clear();
     frameBuffer.reserve(1024 * 512); // 512KB initial capacity
     
-    // For now, just mark as streaming without actually starting gphoto2
+    int outPipe[2];
+    int errPipe[2];
+    if (pipe(outPipe) < 0 || pipe(errPipe) < 0) {
+        std::cerr << "Error creating pipes for gphoto2" << std::endl;
+        return std::make_tuple(false, "Gagal membuat pipe", "");
+    }
+    
+    pid_t pid = fork();
+    if (pid < 0) {
+        std::cerr << "Error forking gphoto2 process" << std::endl;
+        close(outPipe[0]); close(outPipe[1]);
+        close(errPipe[0]); close(errPipe[1]);
+        return std::make_tuple(false, "Gagal fork proses", "");
+    }
+    
+    if (pid == 0) {
+        // Child: redirect stdout/stderr and exec gphoto2
+        dup2(outPipe[1], STDOUT_FILENO);
+        dup2(errPipe[1], STDERR_FILENO);
+        close(outPipe[0]); close(outPipe[1]);
+        close(errPipe[0]); close(errPipe[1]);
+        
+        execlp("gphoto2", "gphoto2", "--stdout", "--capture-movie", (char*)nullptr);
+        // If exec fails
+        _exit(127);
+    }
+    
+    // Parent
+    close(outPipe[1]);
+    close(errPipe[1]);
+    stdoutFd = outPipe[0];
+    stderrFd = errPipe[0];
+    streamProcessPid = pid;
+    
+    // Set non-blocking reads (optional)
+    int flagsOut = fcntl(stdoutFd, F_GETFL, 0);
+    fcntl(stdoutFd, F_SETFL, flagsOut | O_NONBLOCK);
+    int flagsErr = fcntl(stderrFd, F_GETFL, 0);
+    fcntl(stderrFd, F_SETFL, flagsErr | O_NONBLOCK);
+    
     isStreaming = true;
+    
+    // Consume stderr to avoid blocking
+    std::thread errThread([this]() {
+        char buf[4096];
+        while (isStreaming && stderrFd != -1) {
+            ssize_t n = read(stderrFd, buf, sizeof(buf));
+            if (n > 0) {
+                std::string msg(buf, buf + n);
+                if (msg.find("Capturing preview frames as movie") == std::string::npos) {
+                    std::cerr << "⚠️ GPhoto2 error: " << msg << std::endl;
+                }
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        }
+    });
+    errThread.detach();
+    
+    // Read stdout, parse JPEG frames and broadcast
+    std::thread outThread([this]() {
+        const unsigned char startMarker[2] = {0xFF, 0xD8};
+        const unsigned char endMarker[2] = {0xFF, 0xD9};
+        std::vector<unsigned char> readBuf(64 * 1024);
+        while (isStreaming && stdoutFd != -1) {
+            ssize_t n = read(stdoutFd, readBuf.data(), readBuf.size());
+            if (n > 0) {
+                frameBuffer.insert(frameBuffer.end(), readBuf.begin(), readBuf.begin() + n);
+                // Cap buffer size to ~1MB, keep last 512KB
+                if (frameBuffer.size() > 1024 * 1024) {
+                    frameBuffer.erase(frameBuffer.begin(), frameBuffer.end() - (1024 * 512));
+                }
+                // Extract frames
+                for (;;) {
+                    auto itStart = std::search(frameBuffer.begin(), frameBuffer.end(), startMarker, startMarker + 2);
+                    if (itStart == frameBuffer.end()) break;
+                    auto itEnd = std::search(itStart + 2, frameBuffer.end(), endMarker, endMarker + 2);
+                    if (itEnd == frameBuffer.end()) break;
+                    std::vector<unsigned char> frame(itStart, itEnd + 2);
+                    sendFrameToClients(frame);
+                    frameBuffer.erase(frameBuffer.begin(), itEnd + 2);
+                }
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        }
+    });
+    outThread.detach();
     
     std::cout << "MJPEG stream started" << std::endl;
     return std::make_tuple(true, "", getStreamURL());
@@ -918,6 +1004,30 @@ void MJPEGServer::stopStream() {
     
     std::cout << "Stopping MJPEG stream..." << std::endl;
     isStreaming = false;
+    
+    // Try to gracefully stop the gphoto2 process
+    if (streamProcessPid > 0) {
+        kill(streamProcessPid, SIGINT);
+        int status = 0;
+        int waitMs = 0;
+        while (waitMs < 2000) { // wait up to 2s
+            pid_t res = waitpid(streamProcessPid, &status, WNOHANG);
+            if (res == streamProcessPid) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            waitMs += 50;
+        }
+        // If still running, force kill
+        if (waitpid(streamProcessPid, &status, WNOHANG) == 0) {
+            std::cerr << "⚠️ Stream process timeout, killing..." << std::endl;
+            kill(streamProcessPid, SIGKILL);
+            (void)waitpid(streamProcessPid, &status, 0);
+        }
+        streamProcessPid = -1;
+    }
+    
+    // Close pipes
+    if (stdoutFd != -1) { close(stdoutFd); stdoutFd = -1; }
+    if (stderrFd != -1) { close(stderrFd); stderrFd = -1; }
     
     // Clear frame buffer
     frameBuffer.clear();
@@ -975,23 +1085,68 @@ void MJPEGServer::setupRoutes() {
 }
 
 void MJPEGServer::handleClient(int clientSocket) {
-    // Add client to list
-    {
-        std::lock_guard<std::mutex> lock(clientsMutex);
-        clientSockets.push_back(clientSocket);
+    // Read initial HTTP request
+    char reqBuf[2048];
+    ssize_t n = recv(clientSocket, reqBuf, sizeof(reqBuf) - 1, 0);
+    if (n <= 0) { close(clientSocket); return; }
+    reqBuf[n] = 0;
+    std::string request(reqBuf);
+    std::istringstream iss(request);
+    std::string method, path, version;
+    iss >> method >> path >> version;
+    
+    if (method == "GET" && path == "/camera") {
+        // Write MJPEG multipart response headers
+        std::string header =
+            "HTTP/1.1 200 OK\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "Content-Type: multipart/x-mixed-replace; boundary=--frame\r\n"
+            "Cache-Control: no-cache\r\n"
+            "Pragma: no-cache\r\n"
+            "Connection: close\r\n\r\n";
+        send(clientSocket, header.c_str(), header.length(), 0);
+        // Initial boundary
+        std::string boundary = "--frame\r\n";
+        send(clientSocket, boundary.c_str(), boundary.length(), 0);
+        
+        // Register client for streaming
+        {
+            std::lock_guard<std::mutex> lock(clientsMutex);
+            clientSockets.push_back(clientSocket);
+        }
+        
+        // Keep connection open until client disconnects
+        char buffer[1];
+        while (recv(clientSocket, buffer, 1, 0) > 0) {}
+        
+        // Remove client and close
+        removeClient(clientSocket);
+        std::cout << "MJPEG client disconnected" << std::endl;
+        close(clientSocket);
+        return;
+    } else if (method == "GET" && path == "/health") {
+        std::string body = std::string("{\"status\":\"ok\",\"streaming\":") + (isStreaming ? "true" : "false") +
+                           ",\"clients\":" + std::to_string(getClientCount()) + "}";
+        std::ostringstream oss;
+        oss << "HTTP/1.1 200 OK\r\n"
+            << "Access-Control-Allow-Origin: *\r\n"
+            << "Content-Type: application/json\r\n"
+            << "Content-Length: " << body.size() << "\r\n\r\n"
+            << body;
+        std::string resp = oss.str();
+        send(clientSocket, resp.c_str(), resp.length(), 0);
+        close(clientSocket);
+        return;
+    } else {
+        // 404 Not Found
+        std::string notFound = "HTTP/1.1 404 Not Found\r\n"
+                               "Access-Control-Allow-Origin: *\r\n"
+                               "Content-Type: text/plain\r\n"
+                               "Content-Length: 9\r\n\r\nNot Found";
+        send(clientSocket, notFound.c_str(), notFound.length(), 0);
+        close(clientSocket);
+        return;
     }
-    
-    // Simple implementation - just keep connection open
-    char buffer[1];
-    while (recv(clientSocket, buffer, 1, 0) > 0) {
-        // Just read and discard data
-    }
-    
-    // Remove client from list
-    removeClient(clientSocket);
-    
-    std::cout << "MJPEG client disconnected" << std::endl;
-    close(clientSocket);
 }
 
 void MJPEGServer::sendFrameToClients(const std::vector<unsigned char>& frame) {
@@ -1250,11 +1405,8 @@ void SocketIOServer::handleWebSocketHandshake(int clientSocket, const std::strin
     size_t keyEnd = request.find("\r\n", keyPos);
     std::string wsKey = request.substr(keyPos, keyEnd - keyPos);
     
-    // Create WebSocket accept key
-    std::string acceptKey = wsKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-    
-    // Simple base64 encoding (placeholder - in real implementation would use proper base64)
-    std::string encodedKey = "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=";
+    // Compute Sec-WebSocket-Accept
+    std::string encodedKey = computeWebSocketAccept(wsKey);
     
     // Send WebSocket upgrade response
     std::string response = "HTTP/1.1 101 Switching Protocols\r\n"
@@ -1265,53 +1417,58 @@ void SocketIOServer::handleWebSocketHandshake(int clientSocket, const std::strin
     
     send(clientSocket, response.c_str(), response.length(), 0);
     
+    // Engine.IO open and Socket.IO open
+    lastSid = generateSID();
+    std::ostringstream openPayload;
+    openPayload << "0{"
+                << "\"sid\":\"" << lastSid << "\","
+                << "\"upgrades\":[]," // keep simple
+                << "\"pingInterval\":25000,"
+                << "\"pingTimeout\":5000" 
+                << "}";
+    sendTextFrame(clientSocket, openPayload.str());
+    // Socket.IO open
+    sendTextFrame(clientSocket, std::string("40"));
+    
     // Now handle Socket.IO messages
     handleSocketIOMessages(clientSocket);
 }
 
 void SocketIOServer::handleSocketIOMessages(int clientSocket) {
-    char buffer[4096];
-    
     while (running) {
-        ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
-        if (bytesRead <= 0) {
+        std::string payload;
+        if (!recvTextFrame(clientSocket, payload)) {
             break;
         }
+        if (payload.empty()) continue;
         
-        // Parse Socket.IO message (simplified)
-        std::string message(buffer, bytesRead);
+        // Engine.IO ping
+        if (payload[0] == '2') { // ping
+            sendTextFrame(clientSocket, std::string("3")); // pong
+            continue;
+        }
         
-        // Extract event and data (simplified parsing)
-        if (message.length() > 1) {
-            // Socket.IO protocol: message type (4 for event) + data
-            char messageType = message[0];
-            
-            if (messageType == '4') { // Event message
-                size_t eventStart = message.find("[\"");
-                size_t eventEnd = message.find("\"", eventStart + 2);
-                
-                if (eventStart != std::string::npos && eventEnd != std::string::npos) {
-                    std::string eventName = message.substr(eventStart + 2, eventEnd - eventStart - 2);
-                    
-                    // Parse event data (simplified)
-                    std::map<std::string, std::string> eventData;
-                    
-                    // Handle different events
-                    if (eventName == "detect-camera") {
-                        this->photoBoothServer->handleDetectCameraEvent(clientSocket);
-                    } else if (eventName == "start-preview") {
-                        this->photoBoothServer->handleStartPreviewEvent(clientSocket, eventData);
-                    } else if (eventName == "stop-preview") {
-                        this->photoBoothServer->handleStopPreviewEvent(clientSocket);
-                    } else if (eventName == "stop-mjpeg") {
-                        this->photoBoothServer->handleStopMjpegEvent(clientSocket);
-                    } else if (eventName == "capture-photo") {
-                        this->photoBoothServer->handleCapturePhotoEvent(clientSocket);
-                    } else if (eventName == "set-effect") {
-                        this->photoBoothServer->handleSetEffectEvent(clientSocket, eventData);
-                    } else if (eventName == "get-effect") {
-                        this->photoBoothServer->handleGetEffectEvent(clientSocket);
-                    }
+        // Socket.IO event
+        if (payload[0] == '4') {
+            size_t eventStart = payload.find("[\"");
+            size_t eventEnd = payload.find("\"", eventStart + 2);
+            if (eventStart != std::string::npos && eventEnd != std::string::npos) {
+                std::string eventName = payload.substr(eventStart + 2, eventEnd - eventStart - 2);
+                std::map<std::string, std::string> eventData; // simplified
+                if (eventName == "detect-camera") {
+                    this->photoBoothServer->handleDetectCameraEvent(clientSocket);
+                } else if (eventName == "start-preview") {
+                    this->photoBoothServer->handleStartPreviewEvent(clientSocket, eventData);
+                } else if (eventName == "stop-preview") {
+                    this->photoBoothServer->handleStopPreviewEvent(clientSocket);
+                } else if (eventName == "stop-mjpeg") {
+                    this->photoBoothServer->handleStopMjpegEvent(clientSocket);
+                } else if (eventName == "capture-photo") {
+                    this->photoBoothServer->handleCapturePhotoEvent(clientSocket);
+                } else if (eventName == "set-effect") {
+                    this->photoBoothServer->handleSetEffectEvent(clientSocket, eventData);
+                } else if (eventName == "get-effect") {
+                    this->photoBoothServer->handleGetEffectEvent(clientSocket);
                 }
             }
         }
@@ -1320,10 +1477,7 @@ void SocketIOServer::handleSocketIOMessages(int clientSocket) {
 
 void SocketIOServer::sendSocketIOPacket(int clientSocket, const std::string& event, const std::map<std::string, std::string>& data) {
     std::string packet = generateSocketIOPacket(event, data);
-    
-    // Send as WebSocket frame (simplified)
-    std::string frame = "\x81" + std::string(1, static_cast<char>(packet.length() & 0x7F)) + packet;
-    send(clientSocket, frame.c_str(), frame.length(), 0);
+    sendTextFrame(clientSocket, packet);
 }
 
 void SocketIOServer::closeAllClients() {
@@ -1363,6 +1517,117 @@ std::string SocketIOServer::generateSocketIOPacket(const std::string& event, con
     
     oss << "]";
     return oss.str();
+}
+
+std::string SocketIOServer::computeWebSocketAccept(const std::string& clientKey) {
+    std::string magic = clientKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+    unsigned char hash[SHA_DIGEST_LENGTH];
+    SHA1(reinterpret_cast<const unsigned char*>(magic.c_str()), magic.size(), hash);
+    return base64EncodeBytes(hash, SHA_DIGEST_LENGTH);
+}
+
+void SocketIOServer::sendTextFrame(int clientSocket, const std::string& payload) {
+    std::string frame;
+    frame.push_back(static_cast<char>(0x81)); // FIN + text
+    size_t len = payload.size();
+    if (len <= 125) {
+        frame.push_back(static_cast<char>(len));
+    } else if (len <= 65535) {
+        frame.push_back(static_cast<char>(126));
+        uint16_t l = htons(static_cast<uint16_t>(len));
+        frame.append(reinterpret_cast<const char*>(&l), sizeof(l));
+    } else {
+        frame.push_back(static_cast<char>(127));
+        uint64_t l = static_cast<uint64_t>(len);
+        uint64_t be = (((uint64_t)htonl(l & 0xFFFFFFFF)) << 32) | htonl((l >> 32) & 0xFFFFFFFF);
+        frame.append(reinterpret_cast<const char*>(&be), sizeof(be));
+    }
+    frame.append(payload);
+    send(clientSocket, frame.c_str(), frame.size(), 0);
+}
+
+bool SocketIOServer::recvExact(int clientSocket, char* buf, size_t len) {
+    size_t got = 0;
+    while (got < len) {
+        ssize_t n = recv(clientSocket, buf + got, len - got, 0);
+        if (n <= 0) return false;
+        got += static_cast<size_t>(n);
+    }
+    return true;
+}
+
+bool SocketIOServer::recvTextFrame(int clientSocket, std::string& outPayload) {
+    outPayload.clear();
+    unsigned char hdr[2];
+    if (!recvExact(clientSocket, reinterpret_cast<char*>(hdr), 2)) return false;
+    unsigned char finOpcode = hdr[0];
+    unsigned char maskLen = hdr[1];
+    if ((finOpcode & 0x0F) != 0x1) return false; // only text frames
+    bool masked = (maskLen & 0x80) != 0;
+    uint64_t len = (maskLen & 0x7F);
+    if (len == 126) {
+        uint16_t l;
+        if (!recvExact(clientSocket, reinterpret_cast<char*>(&l), sizeof(l))) return false;
+        len = ntohs(l);
+    } else if (len == 127) {
+        uint64_t l;
+        if (!recvExact(clientSocket, reinterpret_cast<char*>(&l), sizeof(l))) return false;
+        // convert big-endian to host
+        uint32_t hi = ntohl(static_cast<uint32_t>(l >> 32));
+        uint32_t lo = ntohl(static_cast<uint32_t>(l & 0xFFFFFFFF));
+        len = (static_cast<uint64_t>(hi) << 32) | lo;
+    }
+    unsigned char mask[4] = {0,0,0,0};
+    if (masked) {
+        if (!recvExact(clientSocket, reinterpret_cast<char*>(mask), 4)) return false;
+    }
+    std::string data;
+    data.resize(static_cast<size_t>(len));
+    if (!recvExact(clientSocket, &data[0], static_cast<size_t>(len))) return false;
+    if (masked) {
+        for (size_t i = 0; i < len; ++i) {
+            data[i] = static_cast<char>(data[i] ^ mask[i % 4]);
+        }
+    }
+    outPayload.swap(data);
+    return true;
+}
+
+std::string SocketIOServer::base64EncodeBytes(const unsigned char* data, size_t len) {
+    const std::string base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string result;
+    unsigned char charArray3[3];
+    unsigned char charArray4[4];
+    int i = 0;
+    size_t idx = 0;
+    while (idx < len) {
+        charArray3[i++] = data[idx++];
+        if (i == 3) {
+            charArray4[0] = (charArray3[0] & 0xfc) >> 2;
+            charArray4[1] = ((charArray3[0] & 0x03) << 4) + ((charArray3[1] & 0xf0) >> 4);
+            charArray4[2] = ((charArray3[1] & 0x0f) << 2) + ((charArray3[2] & 0xc0) >> 6);
+            charArray4[3] = charArray3[2] & 0x3f;
+            for (i = 0; i < 4; i++) result += base64Chars[charArray4[i]];
+            i = 0;
+        }
+    }
+    if (i) {
+        for (int j = i; j < 3; j++) charArray3[j] = 0;
+        charArray4[0] = (charArray3[0] & 0xfc) >> 2;
+        charArray4[1] = ((charArray3[0] & 0x03) << 4) + ((charArray3[1] & 0xf0) >> 4);
+        charArray4[2] = ((charArray3[1] & 0x0f) << 2) + ((charArray3[2] & 0xc0) >> 6);
+        for (int j = 0; j < i + 1; j++) result += base64Chars[charArray4[j]];
+        while (i++ < 3) result += '=';
+    }
+    return result;
+}
+
+std::string SocketIOServer::generateSID() {
+    static const char hex[] = "0123456789abcdef";
+    std::string sid;
+    sid.resize(20);
+    for (int i = 0; i < 20; ++i) sid[i] = hex[rand() % 16];
+    return sid;
 }
 
 void SocketIOServer::handleHttpRequest(int clientSocket, const std::string& request) {
@@ -1417,11 +1682,10 @@ void SocketIOServer::handleApiStatusRequest(int clientSocket) {
     std::vector<Camera> cameras = photoBoothServer->getGPhotoWrapper()->detectCamera();
     bool connected = !cameras.empty();
     
-    std::map<std::string, std::string> data;
-    data["cameraConnected"] = connected ? "true" : "false";
-    data["message"] = connected ? "Kamera terhubung" : "Kamera tidak terhubung (mode simulasi)";
-    
-    std::string json = generateJsonResponse(data);
+    std::ostringstream oss;
+    oss << "{\"cameraConnected\":" << (connected ? "true" : "false")
+        << ",\"message\":\"" << (connected ? "Kamera terhubung" : "Kamera tidak terhubung (mode simulasi)") << "\"}";
+    std::string json = oss.str();
     std::string response = generateHttpResponse(json, "application/json");
     send(clientSocket, response.c_str(), response.length(), 0);
 }
