@@ -12,7 +12,13 @@ OBJ_DIR = obj
 BIN_DIR = bin
 
 # Source files
-SOURCES = $(SRC_DIR)/main.cpp
+SOURCES = $(SRC_DIR)/main.cpp \
+          $(SRC_DIR)/utils.cpp \
+          $(SRC_DIR)/image_effects.cpp \
+          $(SRC_DIR)/gphoto_wrapper.cpp \
+          $(SRC_DIR)/mjpeg_server.cpp \
+          $(SRC_DIR)/socket_io_server.cpp \
+          $(SRC_DIR)/photobooth_server.cpp
 
 # Object files
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
