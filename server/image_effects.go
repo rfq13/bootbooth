@@ -91,9 +91,6 @@ func (ie *ImageEffects) ApplyEffect(jpegData []byte) ([]byte, error) {
         processed = img
     }
 
-    // Always apply horizontal flip to correct mirrored output
-    processed = applyHorizontalFlip(processed)
-
     // Encode back to JPEG
     var buf bytes.Buffer
     if err := jpeg.Encode(&buf, processed, &jpeg.Options{Quality: 85}); err != nil {

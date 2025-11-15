@@ -128,6 +128,28 @@ func parseInt64(s string) (int64, error) {
     return v, nil
 }
 
+func parseFloat64(s string) (float64, error) {
+    var v float64
+    var decimalFound bool
+    var decimalPlace float64 = 0.1
+    
+    for _, ch := range s {
+        if ch >= '0' && ch <= '9' {
+            if decimalFound {
+                v += float64(ch-'0') * decimalPlace
+                decimalPlace /= 10
+            } else {
+                v = v*10 + float64(ch-'0')
+            }
+        } else if ch == '.' && !decimalFound {
+            decimalFound = true
+        } else {
+            return 0, fmt.Errorf("invalid float format")
+        }
+    }
+    return v, nil
+}
+
 func capturePhoto() (map[string]any, error) {
     ts := time.Now().UnixMilli()
     filename := fmt.Sprintf("photo_%d.jpg", ts)
@@ -418,13 +440,25 @@ func main() {
 
     // static /uploads with compression headers
     mux.HandleFunc("/uploads/", func(w http.ResponseWriter, r *http.Request) {
-        filePath := filepath.Join(uploadsDir(), strings.TrimPrefix(r.URL.Path, "/uploads/"))
+        // Extract filename and check for effect parameter
+        pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+        if len(pathParts) < 2 {
+            http.Error(w, "Invalid URL", http.StatusBadRequest)
+            return
+        }
+        
+        filename := pathParts[len(pathParts)-1]
+        
+        // Check if effect parameter is provided
+        effect := r.URL.Query().Get("effect")
         
         // Prevent directory traversal
-        if strings.Contains(filePath, "..") {
+        if strings.Contains(filename, "..") || strings.Contains(filename, "/") || strings.Contains(filename, "\\") {
             http.Error(w, "Forbidden", http.StatusForbidden)
             return
         }
+        
+        filePath := filepath.Join(uploadsDir(), filename)
         
         fileInfo, err := os.Stat(filePath)
         if err != nil {
@@ -437,16 +471,70 @@ func main() {
             return
         }
         
-        // Set cache headers
-        w.Header().Set("Cache-Control", "public, max-age=86400") // 1 day
+        // Set cache headers - no caching when effect is applied
+        if effect == "" || effect == "none" {
+            w.Header().Set("Cache-Control", "public, max-age=86400") // 1 day
+        } else {
+            w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+        }
         w.Header().Set("Vary", "Accept-Encoding")
         
-        // Check if client accepts webp (for future webp conversion)
-        // acceptsWebp := strings.Contains(r.Header.Get("Accept"), "image/webp")
+        // If no effect or "none" effect, serve the original file
+        if effect == "" || effect == "none" {
+            http.ServeFile(w, r, filePath)
+            return
+        }
         
-        // For now, serve original file with proper headers
-        // In future, we can add webp conversion here
-        http.ServeFile(w, r, filePath)
+        // Apply effect to the image
+        imgData, err := os.ReadFile(filePath)
+        if err != nil {
+            http.Error(w, "Failed to read image", http.StatusInternalServerError)
+            return
+        }
+        
+        // Create image effects instance and apply the selected effect
+        imgEffects := NewImageEffects()
+        
+        // Parse effect parameters from query
+        params := EffectParams{
+            Intensity: 0.5,
+            Radius:    1.0,
+            PixelSize: 10,
+        }
+        
+        if intensityStr := r.URL.Query().Get("intensity"); intensityStr != "" {
+            if intensity, err := parseFloat64(intensityStr); err == nil && intensity >= 0 && intensity <= 1 {
+                params.Intensity = intensity
+            }
+        }
+        
+        if radiusStr := r.URL.Query().Get("radius"); radiusStr != "" {
+            if radius, err := parseFloat64(radiusStr); err == nil && radius > 0 {
+                params.Radius = radius
+            }
+        }
+        
+        if pixelSizeStr := r.URL.Query().Get("pixelSize"); pixelSizeStr != "" {
+            if pixelSize, err := parseInt64(pixelSizeStr); err == nil && pixelSize > 0 {
+                params.PixelSize = int(pixelSize)
+            }
+        }
+        
+        // Set the effect
+        imgEffects.SetEffect(EffectType(effect), params)
+        
+        // Apply the effect
+        processedData, err := imgEffects.ApplyEffect(imgData)
+        if err != nil {
+            log.Printf("Error applying effect %s to image %s: %v", effect, filename, err)
+            // Fallback to original image if effect fails
+            http.ServeFile(w, r, filePath)
+            return
+        }
+        
+        // Set content type and write the processed image
+        w.Header().Set("Content-Type", "image/jpeg")
+        w.Write(processedData)
     })
 
     // mount socket.io

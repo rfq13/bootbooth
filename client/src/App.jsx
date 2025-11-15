@@ -24,7 +24,11 @@ export default function App() {
   const [mjpegStreamUrl, setMjpegStreamUrl] = useState(null);
   const [mjpegBust, setMjpegBust] = useState(0);
   const [currentEffect, setCurrentEffect] = useState("none");
-  const [effectParams, setEffectParams] = useState({});
+  const [effectParams, setEffectParams] = useState({
+    intensity: 0.5,
+    radius: 1.0,
+    pixelSize: 10,
+  });
   const [isStartingPreview, setIsStartingPreview] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -282,6 +286,18 @@ export default function App() {
     }, 1000);
   };
 
+  const handleChangeEffectParams = (newParams) => {
+    setEffectParams(newParams);
+
+    // If preview is active, also send the updated params to the server
+    if (isPreviewActive) {
+      socket.emit("apply-effect", {
+        effect: currentEffect,
+        params: newParams,
+      });
+    }
+  };
+
   const handleStopPreview = () => {
     socket.emit("stop-preview");
     socket.emit("stop-mjpeg");
@@ -376,6 +392,7 @@ export default function App() {
                 currentEffect={currentEffect}
                 effectParams={effectParams}
                 onChangeEffect={(key) => setCurrentEffect(key)}
+                onChangeEffectParams={handleChangeEffectParams}
               />
             </div>
 

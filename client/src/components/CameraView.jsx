@@ -24,6 +24,7 @@ export default function CameraView({
   currentEffect,
   effectParams,
   onChangeEffect,
+  onChangeEffectParams,
 }) {
   const containerRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -86,7 +87,15 @@ export default function CameraView({
           />
         ) : currentPhoto ? (
           <img
-            src={`${API_URL}/uploads/${currentPhoto.Filename}`}
+            src={`${API_URL}/uploads/${currentPhoto.Filename}${
+              currentEffect !== "none"
+                ? `?effect=${currentEffect}&intensity=${
+                    effectParams.intensity || 0.5
+                  }&radius=${effectParams.radius || 1.0}&pixelSize=${
+                    effectParams.pixelSize || 10
+                  }`
+                : ""
+            }`}
             alt="Captured Photo"
             className={`w-full h-full ${isFullscreen ? "object-cover" : ""} ${
               isFullscreen ? "" : "rounded-xl"
@@ -180,6 +189,41 @@ export default function CameraView({
             />
           </svg>
         </button>
+
+        {/* Effect Parameters Slider - Only show when currentPhoto is displayed and effect is selected */}
+        {currentPhoto && currentEffect !== "none" && (
+          <div className="absolute bottom-20 left-4 right-4 sm:left-6 sm:right-6 bg-white/90 backdrop-blur-md rounded-xl p-4 shadow-soft-lg border border-primary-200">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">
+                  Intensitas
+                </label>
+                <span className="text-sm text-gray-600">
+                  {Math.round((effectParams.intensity || 0.5) * 100)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={effectParams.intensity || 0.5}
+                onChange={(e) => {
+                  const newIntensity = parseFloat(e.target.value);
+                  // Update effectParams in App.jsx through a callback
+                  if (onChangeEffectParams) {
+                    const updatedParams = {
+                      ...effectParams,
+                      intensity: newIntensity,
+                    };
+                    onChangeEffectParams(updatedParams);
+                  }
+                }}
+                className="w-full h-2 bg-primary-200 rounded-lg appearance-none cursor-pointer accent-primary-500"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Floating Effect Controls */}
         <div className="absolute bottom-4 left-4 right-4 sm:left-6 sm:right-6 flex justify-center sm:justify-between pointer-events-auto">
