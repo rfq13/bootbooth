@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import { toPng } from "html-to-image";
 import { Download, Camera, Film, Sparkles, Star } from "lucide-react";
 
@@ -16,15 +16,71 @@ const PhotoBoothTicket = ({
 }) => {
   const ticketRef = useRef(null);
 
+  // Add print styles for gradient support
+  useEffect(() => {
+    const styleId = "photo-booth-print-styles";
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement("style");
+      style.id = styleId;
+      style.textContent = `
+        @media print {
+          .bg-gradient-to-br,
+          .bg-gradient-to-r,
+          .bg-gradient-to-t,
+          .bg-gradient-to-b {
+            print-color-adjust: exact !important;
+            -webkit-print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          [style*="linear-gradient"] {
+            print-color-adjust: exact !important;
+            -webkit-print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          .text-transparent {
+            print-color-adjust: exact !important;
+            -webkit-print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          .bg-clip-text {
+            print-color-adjust: exact !important;
+            -webkit-print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          /* Force background colors in print */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }, []);
+
   const exportToImage = async () => {
     if (!ticketRef.current) return;
 
     try {
-      // Convert to PNG using html-to-image
+      // Convert to PNG using html-to-image with enhanced gradient support
       const dataUrl = await toPng(ticketRef.current, {
         quality: 0.95,
-        backgroundColor: "#4a7ba7",
+        backgroundColor: null, // Allow transparent background to preserve gradients
         pixelRatio: 3, // For high resolution output
+        filter: (node) => {
+          // Exclude elements that might interfere with gradient rendering
+          return node.tagName !== "SCRIPT";
+        },
+        style: {
+          // Force gradient rendering
+          transform: "scale(1)",
+          WebkitTransform: "scale(1)",
+        },
       });
 
       // Create download link
@@ -39,23 +95,12 @@ const PhotoBoothTicket = ({
 
   return (
     <div
-      className="flex flex-col items-center gap-6 p-8 min-h-screen relative overflow-hidden"
+      className="flex flex-col items-center gap-6 relative overflow-hidden"
       style={{
         background:
           "linear-gradient(135deg, hsl(280, 65%, 55%) 0%, hsl(210, 45%, 45%) 50%, hsl(340, 75%, 65%) 100%)",
       }}
     >
-      {/* Animated floating decoration elements */}
-      <Camera className="absolute top-20 left-10 w-16 h-16 text-booth-gold/40 rotate-12 animate-pulse drop-shadow-lg" />
-      <Film className="absolute top-40 right-16 w-20 h-20 text-booth-pink/40 -rotate-12 animate-pulse" />
-      <Sparkles className="absolute bottom-32 left-20 w-14 h-14 text-booth-orange/50 animate-pulse drop-shadow-lg" />
-      <Star className="absolute top-60 left-1/4 w-12 h-12 text-booth-gold/40 rotate-45 animate-pulse" />
-      <Camera className="absolute bottom-48 right-1/4 w-14 h-14 text-booth-purple/40 -rotate-45 animate-pulse" />
-      <Film className="absolute top-1/3 left-12 w-16 h-16 text-booth-pink/30 rotate-6" />
-      <Sparkles className="absolute top-1/4 right-20 w-10 h-10 text-booth-gold/50 -rotate-12 animate-pulse" />
-      <Star className="absolute bottom-1/4 left-16 w-10 h-10 text-booth-orange/40 rotate-12 animate-pulse" />
-      <Camera className="absolute top-1/2 right-12 w-12 h-12 text-booth-purple/30 rotate-45" />
-
       {/* Glowing orbs */}
       <div className="absolute top-10 right-1/3 w-32 h-32 bg-booth-gold/20 rounded-full blur-3xl animate-pulse" />
       <div className="absolute bottom-20 left-1/4 w-40 h-40 bg-booth-pink/20 rounded-full blur-3xl animate-pulse" />
@@ -71,7 +116,7 @@ const PhotoBoothTicket = ({
       >
         {/* Decorative background with vibrant texture */}
         <div
-          className="absolute inset-0 rounded-3xl shadow-2xl p-6 backdrop-blur-sm"
+          className="absolute inset-0 shadow-2xl p-6 backdrop-blur-sm"
           style={{
             background:
               "linear-gradient(135deg, hsl(280, 65%, 45%) 0%, hsl(210, 50%, 40%) 50%, hsl(340, 75%, 50%) 100%)",
@@ -148,9 +193,9 @@ const PhotoBoothTicket = ({
           />
           {/* Two ticket strips side by side */}
           <div className="flex gap-4 h-full">
-            {[1, 2].map((stripNum) => (
+            {[1, 2].map((stripNum, ngeu) => (
               <div
-                key={stripNum}
+                key={stripNum + ngeu}
                 className="flex-1 bg-gradient-to-br from-booth-ticket via-booth-ticket to-amber-100 rounded-2xl relative overflow-hidden border-4 border-booth-gold/30"
                 style={{
                   boxShadow:
@@ -275,7 +320,9 @@ const PhotoBoothTicket = ({
 
                 {/* Photo slots - 3 photos with vibrant frames */}
                 <div className="flex flex-col gap-4 p-4">
-                  {photos.slice(0, 3).map((photo, idx) => {
+                  {[0, 1, 2].map((idx) => {
+                    const actualIdx = (stripNum - 1) * 3 + idx;
+                    const photo = photos[actualIdx];
                     const gradients = [
                       "from-booth-gold via-booth-orange to-booth-pink",
                       "from-booth-pink via-booth-purple to-booth-blue",
@@ -288,19 +335,25 @@ const PhotoBoothTicket = ({
                     ];
                     return (
                       <div
-                        key={idx}
+                        key={actualIdx}
                         className={`relative w-full aspect-[4/3] bg-gradient-to-br ${gradients[idx]} rounded-xl overflow-hidden p-1.5 shadow-2xl transform transition-transform hover:scale-105`}
                         style={{
                           boxShadow:
                             "0 8px 24px rgba(0,0,0,0.3), 0 0 20px rgba(255,215,0,0.3), inset 0 2px 8px rgba(255,255,255,0.3)",
                         }}
-                        onClick={() => onClickSlot && onClickSlot(idx)}
+                        onClick={() => onClickSlot && onClickSlot(actualIdx)}
                       >
                         <div className="relative w-full h-full bg-white rounded-lg overflow-hidden">
                           {photo ? (
-                            <img src={photo} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" />
+                            <img
+                              src={photo}
+                              alt={`Photo ${actualIdx + 1}`}
+                              className="w-full h-full object-cover"
+                            />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-secondary-500 text-sm">Klik untuk pilih foto</div>
+                            <div className="w-full h-full flex items-center justify-center text-secondary-500 text-sm">
+                              Klik untuk pilih foto
+                            </div>
                           )}
                           {/* Vintage photo corners */}
                           <div className="absolute top-0 left-0 w-6 h-6 border-l-4 border-t-4 border-booth-gold/70" />
@@ -387,7 +440,8 @@ const PhotoBoothTicket = ({
           onClick={exportToImage}
           className="gap-2 bg-gradient-to-r from-booth-purple via-booth-pink to-booth-orange hover:from-booth-pink hover:via-booth-orange hover:to-booth-gold text-white font-bold shadow-2xl transform hover:scale-105 transition-all border-2 border-white/30 px-6 py-3 rounded-lg flex items-center justify-center"
           style={{
-            boxShadow: "0 8px 24px rgba(0,0,0,0.3), 0 0 20px rgba(255,215,0,0.4)",
+            boxShadow:
+              "0 8px 24px rgba(0,0,0,0.3), 0 0 20px rgba(255,215,0,0.4)",
           }}
         >
           <Download className="w-5 h-5 mr-2" />

@@ -4,6 +4,7 @@ import CameraView from "./components/CameraView.jsx";
 import PhotoGallery from "./components/PhotoGallery.jsx";
 import Controls from "./components/Controls.jsx";
 import LayoutPage from "./components/LayoutPage.jsx";
+import { NotifyProvider } from "./components/Notify.jsx";
 import { appState } from "./main.jsx";
 import { SOCKET_URL, API_URL } from "./constants";
 
@@ -314,158 +315,164 @@ export default function App() {
 
   // If layout page is shown, render it instead of the main app
   if (showLayoutPage) {
-    return <LayoutPage onBack={() => setShowLayoutPage(false)} />;
+    return (
+      <NotifyProvider>
+        <LayoutPage onBack={() => setShowLayoutPage(false)} />
+      </NotifyProvider>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-100 via-primary-50 to-white">
-      <div className="container mx-auto px-6 py-8">
-        {/* Header */}
-        <header className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full mb-4 shadow-lg animate-glow">
-            <svg
-              className="w-10 h-10 text-white"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-              <path
-                fillRule="evenodd"
-                d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
-                clipRule="evenodd"
-              />
-            </svg>
-          </div>
-          <h1 className="text-5xl font-bold mb-4 font-poppins animate-float drop-shadow-sm h-32 shiny-text">
-            Digitize your photobooth
-          </h1>
-          <p className="text-lg text-secondary-700 max-w-2xl mx-auto leading-relaxed drop-shadow-sm">
-            Experience live preview, instant effects, and easy captures with our
-            modern photobooth solution. Perfect for creating memorable moments
-            with style.
-          </p>
-        </header>
-
-        {/* Status Indicators */}
-        <div className="flex justify-center mb-8">
-          <div className="flex items-center space-x-6 bg-white/80 backdrop-blur-md rounded-2xl px-8 py-4 shadow-soft-lg border border-primary-200">
-            <div className="flex items-center space-x-2">
-              <div
-                className={`w-3 h-3 rounded-full ${
-                  socketConnected ? "bg-green-500" : "bg-red-500"
-                } animate-pulse`}
-              ></div>
-              <span className="text-secondary-900 font-medium">
-                Server: {socketConnected ? "Aktif" : "Tidak Aktif"}
-              </span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div
-                className={`w-3 h-3 rounded-full ${
-                  cameraConnected ? "bg-green-500" : "bg-yellow-500"
-                } animate-pulse`}
-              ></div>
-              <span className="text-secondary-900 font-medium">
-                Kamera: {cameraConnected ? "Terhubung" : "Tidak Terhubung"}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="w-full max-w-7xl mx-auto px-4">
-          {/* Main Container */}
-          <div className="space-y-6">
-            {/* Header Section */}
-            <div className="text-center space-y-2">
-              <h2 className="text-3xl font-bold text-slate-800 tracking-tight">
-                Live Preview
-              </h2>
-              <p className="text-slate-600 text-base">
-                See your photobooth in real-time
-              </p>
-            </div>
-
-            {/* Camera Preview Card */}
-            <div className="bg-white rounded-3xl p-6 shadow-xl">
-              <CameraView
-                isCapturing={isCapturing}
-                countdown={countdown}
-                currentPhoto={currentPhoto}
-                previewImage={previewImage}
-                mjpegStreamUrl={mjpegStreamUrl}
-                mjpegBust={mjpegBust}
-                isPreviewActive={isPreviewActive}
-                currentEffect={currentEffect}
-                effectParams={effectParams}
-                onChangeEffect={(key) => setCurrentEffect(key)}
-                onChangeEffectParams={handleChangeEffectParams}
-              />
-            </div>
-
-            {/* Controls Section */}
-            <div className="flex justify-center">
-              <Controls
-                onCapture={handleCapturePhoto}
-                isCapturing={isCapturing}
-                cameraConnected={cameraConnected}
-                onStartPreview={handleStartPreview}
-                onStopPreview={handleStopPreview}
-                isPreviewActive={isPreviewActive}
-              />
-            </div>
-
-            <div className="flex justify-center mt-4">
-              <button
-                onClick={() => {
-                  handleStopPreview();
-                  setShowLayoutPage(true);
-                }}
-                className="px-8 py-4 rounded-2xl font-semibold text-base bg-gradient-to-r from-primary-500 to-primary-600 text-white hover:from-primary-600 hover:to-primary-700 transition-all shadow-soft-lg"
+    <NotifyProvider>
+      <div className="min-h-screen bg-gradient-to-br from-primary-100 via-primary-50 to-white">
+        <div className="container mx-auto px-6 py-8">
+          {/* Header */}
+          <header className="text-center mb-12">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full mb-4 shadow-lg animate-glow">
+              <svg
+                className="w-10 h-10 text-white"
+                fill="currentColor"
+                viewBox="0 0 20 20"
               >
-                Selesai Pemotretan • Pilih Layout
-              </button>
+                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                <path
+                  fillRule="evenodd"
+                  d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </div>
+            <h1 className="text-5xl font-bold mb-4 font-poppins animate-float drop-shadow-sm h-32 shiny-text">
+              Digitize your photobooth
+            </h1>
+            <p className="text-lg text-secondary-700 max-w-2xl mx-auto leading-relaxed drop-shadow-sm">
+              Experience live preview, instant effects, and easy captures with
+              our modern photobooth solution. Perfect for creating memorable
+              moments with style.
+            </p>
+          </header>
+
+          {/* Status Indicators */}
+          <div className="flex justify-center mb-8">
+            <div className="flex items-center space-x-6 bg-white/80 backdrop-blur-md rounded-2xl px-8 py-4 shadow-soft-lg border border-primary-200">
+              <div className="flex items-center space-x-2">
+                <div
+                  className={`w-3 h-3 rounded-full ${
+                    socketConnected ? "bg-green-500" : "bg-red-500"
+                  } animate-pulse`}
+                ></div>
+                <span className="text-secondary-900 font-medium">
+                  Server: {socketConnected ? "Aktif" : "Tidak Aktif"}
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div
+                  className={`w-3 h-3 rounded-full ${
+                    cameraConnected ? "bg-green-500" : "bg-yellow-500"
+                  } animate-pulse`}
+                ></div>
+                <span className="text-secondary-900 font-medium">
+                  Kamera: {cameraConnected ? "Terhubung" : "Tidak Terhubung"}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Photo Gallery Section */}
-        <div className="mt-12">
-          <div className="bg-white/85 backdrop-blur-md rounded-3xl p-8 shadow-soft-lg border border-primary-200">
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-semibold text-secondary-900 mb-2 font-poppins drop-shadow-sm">
-                Recent Captures
-              </h2>
-              <p className="text-secondary-700">Your memorable moments</p>
+          <div className="w-full max-w-7xl mx-auto px-4">
+            {/* Main Container */}
+            <div className="space-y-6">
+              {/* Header Section */}
+              <div className="text-center space-y-2">
+                <h2 className="text-3xl font-bold text-slate-800 tracking-tight">
+                  Live Preview
+                </h2>
+                <p className="text-slate-600 text-base">
+                  See your photobooth in real-time
+                </p>
+              </div>
+
+              {/* Camera Preview Card */}
+              <div className="bg-white rounded-3xl p-6 shadow-xl">
+                <CameraView
+                  isCapturing={isCapturing}
+                  countdown={countdown}
+                  currentPhoto={currentPhoto}
+                  previewImage={previewImage}
+                  mjpegStreamUrl={mjpegStreamUrl}
+                  mjpegBust={mjpegBust}
+                  isPreviewActive={isPreviewActive}
+                  currentEffect={currentEffect}
+                  effectParams={effectParams}
+                  onChangeEffect={(key) => setCurrentEffect(key)}
+                  onChangeEffectParams={handleChangeEffectParams}
+                />
+              </div>
+
+              {/* Controls Section */}
+              <div className="flex justify-center">
+                <Controls
+                  onCapture={handleCapturePhoto}
+                  isCapturing={isCapturing}
+                  cameraConnected={cameraConnected}
+                  onStartPreview={handleStartPreview}
+                  onStopPreview={handleStopPreview}
+                  isPreviewActive={isPreviewActive}
+                />
+              </div>
+
+              <div className="flex justify-center mt-4">
+                <button
+                  onClick={() => {
+                    handleStopPreview();
+                    setShowLayoutPage(true);
+                  }}
+                  className="px-8 py-4 rounded-2xl font-semibold text-base bg-gradient-to-r from-primary-500 to-primary-600 text-white hover:from-primary-600 hover:to-primary-700 transition-all shadow-soft-lg"
+                >
+                  Selesai Pemotretan • Pilih Layout
+                </button>
+              </div>
             </div>
-            <PhotoGallery
-              photos={photos}
-              currentPhoto={currentPhoto}
-              onSelectPhoto={(p) => setCurrentPhoto(p)}
-              onDeletePhoto={async (filename) => {
-                try {
-                  const resp = await fetch(
-                    `${API_URL}/api/photos/${filename}`,
-                    { method: "DELETE" }
-                  );
-                  if (resp.ok) {
-                    setPhotos((prev) =>
-                      prev.filter((ph) => ph.Filename !== filename)
+          </div>
+
+          {/* Photo Gallery Section */}
+          <div className="mt-12">
+            <div className="bg-white/85 backdrop-blur-md rounded-3xl p-8 shadow-soft-lg border border-primary-200">
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-semibold text-secondary-900 mb-2 font-poppins drop-shadow-sm">
+                  Recent Captures
+                </h2>
+                <p className="text-secondary-700">Your memorable moments</p>
+              </div>
+              <PhotoGallery
+                photos={photos}
+                currentPhoto={currentPhoto}
+                onSelectPhoto={(p) => setCurrentPhoto(p)}
+                onDeletePhoto={async (filename) => {
+                  try {
+                    const resp = await fetch(
+                      `${API_URL}/api/photos/${filename}`,
+                      { method: "DELETE" }
                     );
-                    if (currentPhoto?.Filename === filename)
-                      setCurrentPhoto(null);
+                    if (resp.ok) {
+                      setPhotos((prev) =>
+                        prev.filter((ph) => ph.Filename !== filename)
+                      );
+                      if (currentPhoto?.Filename === filename)
+                        setCurrentPhoto(null);
+                    }
+                    return resp;
+                  } catch (e) {
+                    console.error("Delete failed", e);
+                    throw e;
                   }
-                  return resp;
-                } catch (e) {
-                  console.error("Delete failed", e);
-                  throw e;
-                }
-              }}
-              onRefreshPhotos={() => loadPhotos(setPhotos)}
-            />
+                }}
+                onRefreshPhotos={() => loadPhotos(setPhotos)}
+              />
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </NotifyProvider>
   );
 }
 

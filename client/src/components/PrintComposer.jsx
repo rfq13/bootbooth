@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
+import { useNotify } from "./Notify";
 import { API_URL } from "../constants";
 
 // Canvas size for 4R at ~300dpi: 1200x1800 px (portrait)
@@ -26,6 +27,8 @@ export default function PrintComposer({
 }) {
   const canvasRef = useRef(null);
   const [dataUrl, setDataUrl] = useState(null);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const notify = useNotify();
 
   function drawPlaceholder(ctx, dx, dy, dw, dh) {
     ctx.save();
@@ -344,26 +347,45 @@ export default function PrintComposer({
   }, [photo, layoutId, songTitle, songArtist]);
 
   const handleQueuePrint = async () => {
-    if (!dataUrl) return;
-    const res = await fetch(dataUrl);
-    const blob = await res.blob();
-    const form = new FormData();
-    const filename = `${
-      photo?.Filename?.replace(/\.[^.]+$/, "") || "print"
-    }_${layoutId}.jpg`;
-    form.append("file", blob, filename);
-    form.append("layoutId", layoutId);
+    if (!dataUrl || isPrinting) return;
 
+    setIsPrinting(true);
     try {
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const form = new FormData();
+      const filename = `${
+        photo?.Filename?.replace(/\.[^.]+$/, "") || "print"
+      }_${layoutId}.jpg`;
+      form.append("file", blob, filename);
+      form.append("layoutId", layoutId);
+
       const resp = await fetch(`${API_URL}/api/printqueue`, {
         method: "POST",
         body: form,
       });
       if (!resp.ok) throw new Error(`Upload gagal: ${resp.status}`);
-      alert("Berhasil dikirim ke antrian cetak (/printqueue)");
+
+      if (window.notify) {
+        window.notify(
+          "success",
+          "Berhasil dikirim ke antrian cetak (/printqueue)"
+        );
+      } else {
+        alert("Berhasil dikirim ke antrian cetak (/printqueue)");
+      }
     } catch (err) {
       console.error(err);
-      alert("Gagal mengupload ke antrian cetak. Cek backend.");
+      if (window.notify) {
+        window.notify(
+          "error",
+          "Gagal mengupload ke antrian cetak. Cek backend."
+        );
+      } else {
+        alert("Gagal mengupload ke antrian cetak. Cek backend.");
+      }
+    } finally {
+      setIsPrinting(false);
     }
   };
 
@@ -382,14 +404,40 @@ export default function PrintComposer({
         <div className="w-full lg:w-64">
           <button
             onClick={handleQueuePrint}
-            disabled={!dataUrl}
-            className={`w-full py-3 px-4 rounded-xl font-medium transition-all transform hover:scale-105 shadow-soft ${
-              dataUrl
+            disabled={!dataUrl || isPrinting}
+            className={`w-full py-3 px-4 rounded-xl font-medium transition-all transform hover:scale-105 shadow-soft flex items-center justify-center gap-2 ${
+              dataUrl && !isPrinting
                 ? "bg-gradient-to-r from-primary-400 to-primary-600 text-white"
                 : "bg-primary-100 text-secondary-500 cursor-not-allowed"
             }`}
           >
-            Simpan & Antri Cetak
+            {isPrinting ? (
+              <>
+                <svg
+                  className="animate-spin h-4 w-4 text-current"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                Mencetak...
+              </>
+            ) : (
+              "Simpan & Antri Cetak"
+            )}
           </button>
           <p className="text-secondary-700 text-sm mt-3">
             Hasil diproses di frontend, diekspor JPEG, lalu diunggah ke backend
