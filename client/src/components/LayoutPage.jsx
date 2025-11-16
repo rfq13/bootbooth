@@ -113,10 +113,13 @@ const LayoutPage = ({ onBack }) => {
                       );
                       handleRemovePhoto(filename);
                     }
+                    return resp;
                   } catch (e) {
                     console.error("Delete failed", e);
+                    throw e;
                   }
                 }}
+                onRefreshPhotos={loadPhotos}
               />
 
               {/* Selected Photos Preview */}

@@ -1,5 +1,5 @@
 import { API_URL } from "../constants";
-import { useRef, useState, useEffect } from "preact/hooks";
+import { useRef, useState, useEffect, useCallback } from "preact/hooks";
 
 const EFFECT_INFO = {
   none: { name: "Normal", icon: "📷" },
@@ -28,6 +28,32 @@ export default function CameraView({
 }) {
   const containerRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const debounceRef = useRef(null);
+
+  // Debounced function for updating effect parameters
+  const debouncedUpdateEffectParams = useCallback(
+    (params) => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+
+      debounceRef.current = setTimeout(() => {
+        if (onChangeEffectParams) {
+          onChangeEffectParams(params);
+        }
+      }, 300); // 300ms debounce delay
+    },
+    [onChangeEffectParams]
+  );
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
 
   const handleFullscreen = () => {
     if (document.fullscreenElement) {
@@ -87,7 +113,7 @@ export default function CameraView({
           />
         ) : currentPhoto ? (
           <img
-            src={`${API_URL}/uploads/${currentPhoto.Filename}${
+            src={`${API_URL}/uploads/${currentPhoto.filename}${
               currentEffect !== "none"
                 ? `?effect=${currentEffect}&intensity=${
                     effectParams.intensity || 0.5
@@ -210,14 +236,12 @@ export default function CameraView({
                 value={effectParams.intensity || 0.5}
                 onChange={(e) => {
                   const newIntensity = parseFloat(e.target.value);
-                  // Update effectParams in App.jsx through a callback
-                  if (onChangeEffectParams) {
-                    const updatedParams = {
-                      ...effectParams,
-                      intensity: newIntensity,
-                    };
-                    onChangeEffectParams(updatedParams);
-                  }
+                  // Update effectParams in App.jsx through a debounced callback
+                  const updatedParams = {
+                    ...effectParams,
+                    intensity: newIntensity,
+                  };
+                  debouncedUpdateEffectParams(updatedParams);
                 }}
                 className="w-full h-2 bg-primary-200 rounded-lg appearance-none cursor-pointer accent-primary-500"
               />

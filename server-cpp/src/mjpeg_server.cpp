@@ -137,12 +137,52 @@ std::tuple<bool, std::string, std::string> MJPEGServer::startStream() {
                     if (itEnd == frameBuffer.end()) break;
                     std::vector<unsigned char> frame(itStart, itEnd + 2);
                     std::vector<unsigned char> processedFrame = effects.applyEffect(frame);
+                    
+                    // Log frame processing
+                    if (frameCount % 30 == 0) {
+                        auto currentEffect = effects.getEffect();
+                        std::cout << "📹 Processing frame " << frameCount
+                                  << " | Original size: " << frame.size()
+                                  << " | Processed size: " << processedFrame.size()
+                                  << " | Current effect: ";
+                        switch (currentEffect.first) {
+                            case EffectType::NONE:
+                                std::cout << "NONE";
+                                break;
+                            case EffectType::FISHEYE:
+                                std::cout << "FISHEYE";
+                                break;
+                            case EffectType::GRAYSCALE:
+                                std::cout << "GRAYSCALE";
+                                break;
+                            case EffectType::SEPIA:
+                                std::cout << "SEPIA";
+                                break;
+                            case EffectType::VIGNETTE:
+                                std::cout << "VIGNETTE";
+                                break;
+                            case EffectType::BLUR:
+                                std::cout << "BLUR";
+                                break;
+                            case EffectType::SHARPEN:
+                                std::cout << "SHARPEN";
+                                break;
+                            case EffectType::INVERT:
+                                std::cout << "INVERT";
+                                break;
+                            case EffectType::PIXELATE:
+                                std::cout << "PIXELATE";
+                                break;
+                            default:
+                                std::cout << "UNKNOWN";
+                                break;
+                        }
+                        std::cout << std::endl;
+                    }
+                    
                     sendFrameToClients(processedFrame);
                     frameBuffer.erase(frameBuffer.begin(), itEnd + 2);
                     frameCount++;
-                    if (frameCount % 30 == 0) {
-                        std::cout << "📹 Sent " << frameCount << " MJPEG frames" << std::endl;
-                    }
                 }
             } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -199,7 +239,42 @@ int MJPEGServer::getClientCount() const {
 
 void MJPEGServer::setEffect(EffectType effect, const EffectParams& params) {
     effects.setEffect(effect, params);
-    std::cout << "MJPEG effect set" << std::endl;
+    std::cout << "✅ MJPEG effect set: ";
+    switch (effect) {
+        case EffectType::NONE:
+            std::cout << "NONE";
+            break;
+        case EffectType::FISHEYE:
+            std::cout << "FISHEYE";
+            break;
+        case EffectType::GRAYSCALE:
+            std::cout << "GRAYSCALE";
+            break;
+        case EffectType::SEPIA:
+            std::cout << "SEPIA";
+            break;
+        case EffectType::VIGNETTE:
+            std::cout << "VIGNETTE";
+            break;
+        case EffectType::BLUR:
+            std::cout << "BLUR";
+            break;
+        case EffectType::SHARPEN:
+            std::cout << "SHARPEN";
+            break;
+        case EffectType::INVERT:
+            std::cout << "INVERT";
+            break;
+        case EffectType::PIXELATE:
+            std::cout << "PIXELATE";
+            break;
+        default:
+            std::cout << "UNKNOWN";
+            break;
+    }
+    std::cout << " with intensity: " << params.intensity
+              << ", radius: " << params.radius
+              << ", pixelSize: " << params.pixelSize << std::endl;
 }
 
 std::pair<EffectType, EffectParams> MJPEGServer::getCurrentEffect() const {
@@ -329,8 +404,7 @@ void MJPEGServer::handleClient(int clientSocket) {
 }
 
 void MJPEGServer::sendFrameToClients(const std::vector<unsigned char>& frame) {
-    std::vector<unsigned char> processedFrame = effects.applyEffect(frame);
-    std::string header = "Content-Type: image/jpeg\r\nContent-Length: " + std::to_string(processedFrame.size()) + "\r\n\r\n";
+    std::string header = "Content-Type: image/jpeg\r\nContent-Length: " + std::to_string(frame.size()) + "\r\n\r\n";
     std::string boundary = "\r\n--frame\r\n";
     std::lock_guard<std::mutex> lock(clientsMutex);
     std::vector<int> failedClients;
@@ -339,7 +413,7 @@ void MJPEGServer::sendFrameToClients(const std::vector<unsigned char>& frame) {
             failedClients.push_back(clientSocket);
             continue;
         }
-        if (send(clientSocket, reinterpret_cast<const char*>(processedFrame.data()), processedFrame.size(), 0) < 0) {
+        if (send(clientSocket, reinterpret_cast<const char*>(frame.data()), frame.size(), 0) < 0) {
             failedClients.push_back(clientSocket);
             continue;
         }

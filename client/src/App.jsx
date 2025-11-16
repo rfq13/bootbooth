@@ -442,10 +442,13 @@ export default function App() {
                     if (currentPhoto?.Filename === filename)
                       setCurrentPhoto(null);
                   }
+                  return resp;
                 } catch (e) {
                   console.error("Delete failed", e);
+                  throw e;
                 }
               }}
+              onRefreshPhotos={() => loadPhotos(setPhotos)}
             />
           </div>
         </div>

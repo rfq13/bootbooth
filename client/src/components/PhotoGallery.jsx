@@ -6,6 +6,7 @@ export default function PhotoGallery({
   onSelectPhoto,
   onDeletePhoto,
   currentPhoto,
+  onRefreshPhotos, // New prop for refreshing photos
 }) {
   const [loadedImages, setLoadedImages] = useState(new Set());
   const [imageErrors, setImageErrors] = useState(new Set());
@@ -179,7 +180,16 @@ export default function PhotoGallery({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDeletePhoto(photo.filename);
+                      onDeletePhoto(photo.filename)
+                        .then(() => {
+                          // Refresh photos after successful deletion
+                          if (onRefreshPhotos) {
+                            onRefreshPhotos();
+                          }
+                        })
+                        .catch((error) => {
+                          console.error("Error deleting photo:", error);
+                        });
                     }}
                     className="bg-red-500/20 backdrop-blur-sm text-red-300 p-1 rounded hover:bg-red-500/30 transition-colors shadow-soft"
                     title="Delete"
