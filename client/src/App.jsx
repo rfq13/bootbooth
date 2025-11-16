@@ -413,6 +413,18 @@ export default function App() {
                 isPreviewActive={isPreviewActive}
               />
             </div>
+
+            <div className="flex justify-center mt-4">
+              <button
+                onClick={() => {
+                  handleStopPreview();
+                  setShowLayoutPage(true);
+                }}
+                className="px-8 py-4 rounded-2xl font-semibold text-base bg-gradient-to-r from-primary-500 to-primary-600 text-white hover:from-primary-600 hover:to-primary-700 transition-all shadow-soft-lg"
+              >
+                Selesai Pemotretan • Pilih Layout
+              </button>
+            </div>
           </div>
         </div>
 

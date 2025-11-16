@@ -13,6 +13,7 @@ export default function PhotoStrip({
   stripId = 1,
   isReversed = false,
   idolPhotoUrl = defaultIdolPhotoUrl,
+  onClickSlot,
 }) {
   const ordered = isReversed ? [...photos].reverse() : photos;
 
@@ -42,14 +43,18 @@ export default function PhotoStrip({
       {/* MAIN PHOTOS */}
       <div className="flex flex-col flex-grow p-1.5 space-y-1.5">
         {ordered.slice(0, 3).map((url, index) => (
-          <div key={index} className="flex-grow bg-gray-100 border-2 border-dashed border-gray-300 relative overflow-hidden">
+          <div key={index} className="flex-grow bg-gray-100 border-2 border-dashed border-gray-300 relative overflow-hidden" onClick={() => onClickSlot && onClickSlot(index)}>
             <div className={`absolute text-gray-300 text-lg ${index === 0 ? "top-1 right-1" : "bottom-1 left-1"}`}>
               <span className="text-2xl opacity-70">✶</span>
             </div>
             {index === 1 && (
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-2xl font-bold text-gray-300 opacity-30">BYD</div>
             )}
-            <img src={url} alt={`Photo ${index + 1}`} className="w-full h-full object-cover" />
+            {url ? (
+              <img src={url} alt={`Photo ${index + 1}`} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-secondary-500 text-sm">Klik untuk pilih foto</div>
+            )}
           </div>
         ))}
       </div>

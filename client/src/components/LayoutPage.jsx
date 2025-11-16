@@ -1,24 +1,41 @@
 import { useState, useEffect, useRef } from "preact/hooks";
 import PhotoBoothTicket from "./PhotoBoothTicket";
 import PhotoStrip from "./PhotoStrip";
+import DoublePhotoStrip from "./DoublePhotoStrip";
 import PhotoGallery from "./PhotoGallery";
 import { API_URL } from "../constants";
 
 const LayoutPage = ({ onBack }) => {
   const [selectedPhotos, setSelectedPhotos] = useState([]);
   const [currentPhoto, setCurrentPhoto] = useState(null);
+  const [slotPhotos, setSlotPhotos] = useState([null, null, null]);
+  const [slotPickerOpen, setSlotPickerOpen] = useState(false);
+  const [activeSlot, setActiveSlot] = useState(null);
   const [photos, setPhotos] = useState([]);
   const [eventName, setEventName] = useState("Movie");
   const [date, setDate] = useState("Sunday, May 25th");
   const [time, setTime] = useState("19:30");
   const [row, setRow] = useState("01");
   const [seat, setSeat] = useState("23");
-  const [layoutType, setLayoutType] = useState("ticket"); // 'ticket' | 'strip'
+  const [layoutType, setLayoutType] = useState("ticket"); // 'ticket' | 'strip' | 'grid4' | 'doubleStrip'
   const layoutRef = useRef(null);
 
   useEffect(() => {
     loadPhotos();
   }, []);
+
+  useEffect(() => {
+    const count = layoutType === "grid4" ? 4 : layoutType === "doubleStrip" ? 6 : 3;
+    setSlotPhotos((prev) => {
+      const next = [...prev];
+      if (next.length < count) {
+        while (next.length < count) next.push(null);
+      } else if (next.length > count) {
+        next.length = count;
+      }
+      return next;
+    });
+  }, [layoutType]);
 
   const loadPhotos = async () => {
     try {
@@ -37,8 +54,21 @@ const LayoutPage = ({ onBack }) => {
 
   const handleSelectPhoto = (photo) => {
     setCurrentPhoto(photo);
-    if (photo && !selectedPhotos.find((p) => p.Filename === photo.Filename)) {
-      setSelectedPhotos((prev) => [...prev, photo]);
+    if (activeSlot !== null) {
+      setSlotPhotos((prev) => {
+        const next = [...prev];
+        next[activeSlot] = photo;
+        return next;
+      });
+      if (!selectedPhotos.find((p) => p.Filename === photo.Filename)) {
+        setSelectedPhotos((prev) => [...prev, photo]);
+      }
+      setSlotPickerOpen(false);
+      setActiveSlot(null);
+    } else {
+      if (photo && !selectedPhotos.find((p) => p.Filename === photo.Filename)) {
+        setSelectedPhotos((prev) => [...prev, photo]);
+      }
     }
   };
 
@@ -50,8 +80,10 @@ const LayoutPage = ({ onBack }) => {
   };
 
   const handleProceedToPrint = async () => {
-    if (selectedPhotos.length === 0) {
-      alert("Silakan pilih minimal 1 foto terlebih dahulu!");
+    const requiredSlots = layoutType === "grid4" ? 4 : layoutType === "doubleStrip" ? 6 : 3;
+    const filled = slotPhotos.filter(Boolean).length;
+    if (filled < requiredSlots) {
+      alert("Lengkapi semua placement foto terlebih dahulu!");
       return;
     }
     try {
@@ -74,10 +106,17 @@ const LayoutPage = ({ onBack }) => {
   };
 
   const getPhotoUrls = () => {
-    return selectedPhotos.map((photo) => `${API_URL}${photo.path}`);
+    const urls = slotPhotos.map((p) => (p ? `${API_URL}${p.path}` : null));
+    return urls;
+  };
+
+  const openSlotPicker = (index) => {
+    setActiveSlot(index);
+    setSlotPickerOpen(true);
   };
 
   return (
+    <>
     <div className="min-h-screen bg-gradient-to-br from-primary-100 via-primary-50 to-white p-8">
       <div className="container mx-auto">
         {/* Header */}
@@ -184,6 +223,26 @@ const LayoutPage = ({ onBack }) => {
                   >
                     PhotoStrip (BYD)
                   </button>
+                  <button
+                    className={`px-3 py-2 rounded-lg border ${
+                      layoutType === "grid4"
+                        ? "bg-primary-100 border-primary-300"
+                        : "bg-white border-primary-200"
+                    }`}
+                    onClick={() => setLayoutType("grid4")}
+                  >
+                    4R Grid (2×2)
+                  </button>
+                  <button
+                    className={`px-3 py-2 rounded-lg border ${
+                      layoutType === "doubleStrip"
+                        ? "bg-primary-100 border-primary-300"
+                        : "bg-white border-primary-200"
+                    }`}
+                    onClick={() => setLayoutType("doubleStrip")}
+                  >
+                    2× PhotoStrip (2R)
+                  </button>
                 </div>
               </div>
 
@@ -254,7 +313,7 @@ const LayoutPage = ({ onBack }) => {
                 Preview Layout
               </h2>
 
-              {selectedPhotos.length === 0 ? (
+              {slotPhotos.filter(Boolean).length === 0 ? (
                 <div className="text-center py-12 text-secondary-500">
                   <p>
                     Silakan pilih minimal 1 foto untuk melihat preview layout
@@ -271,9 +330,32 @@ const LayoutPage = ({ onBack }) => {
                       row={row}
                       seat={seat}
                       domRef={layoutRef}
+                      onClickSlot={openSlotPicker}
                     />
+                  ) : layoutType === "strip" ? (
+                    <PhotoStrip photos={getPhotoUrls()} domRef={layoutRef} onClickSlot={openSlotPicker} />
                   ) : (
-                    <PhotoStrip photos={getPhotoUrls()} domRef={layoutRef} />
+                    layoutType === "grid4" ? (
+                      <div ref={layoutRef} className="grid grid-cols-2 gap-3 w-[600px] h-[900px] bg-white p-4 border border-primary-200 rounded-3xl">
+                      {getPhotoUrls().slice(0, 4).map((url, idx) => (
+                        <div
+                          key={idx}
+                          className="relative bg-gray-100 border-2 border-dashed border-primary-200 rounded-xl overflow-hidden cursor-pointer"
+                          onClick={() => openSlotPicker(idx)}
+                          style={{ aspectRatio: "3/2" }}
+                        >
+                          {url ? (
+                            <img src={url} alt={`Slot ${idx + 1}`} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-secondary-500">Klik untuk pilih foto</div>
+                          )}
+                          <div className="absolute bottom-1 right-2 bg-black/50 text-white text-xs px-2 py-0.5 rounded">{idx + 1}</div>
+                        </div>
+                      ))}
+                      </div>
+                    ) : (
+                      <DoublePhotoStrip photos={getPhotoUrls()} domRef={layoutRef} onClickSlot={openSlotPicker} />
+                    )
                   )}
                 </div>
               )}
@@ -287,10 +369,19 @@ const LayoutPage = ({ onBack }) => {
                   Kembali
                 </button>
                 <button
+                  onClick={() => {
+                    setSlotPhotos((prev) => prev.map(() => null));
+                    setSelectedPhotos([]);
+                  }}
+                  className="px-6 py-3 bg-secondary-200 text-secondary-800 rounded-lg hover:bg-secondary-300 transition-colors"
+                >
+                  Ulangi Sesi
+                </button>
+                <button
                   onClick={handleProceedToPrint}
-                  disabled={selectedPhotos.length === 0}
+                  disabled={slotPhotos.filter(Boolean).length < (layoutType === "grid4" ? 4 : 3)}
                   className={`px-6 py-3 rounded-lg transition-colors ${
-                    selectedPhotos.length > 0
+                    slotPhotos.filter(Boolean).length >= (layoutType === "grid4" ? 4 : 3)
                       ? "bg-gradient-to-r from-primary-400 to-primary-600 text-white hover:from-primary-500 hover:to-primary-700"
                       : "bg-gray-300 text-gray-500 cursor-not-allowed"
                   }`}
@@ -303,6 +394,34 @@ const LayoutPage = ({ onBack }) => {
         </div>
       </div>
     </div>
+    {slotPickerOpen && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-2xl p-6 w-[90vw] max-w-4xl shadow-soft-lg border border-primary-200">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl font-semibold">Pilih Foto untuk Slot {activeSlot !== null ? activeSlot + 1 : ""}</h3>
+            <button className="px-3 py-1 rounded-lg bg-secondary-200 text-secondary-800" onClick={() => { setSlotPickerOpen(false); setActiveSlot(null); }}>Tutup</button>
+          </div>
+          <PhotoGallery
+            photos={photos}
+            currentPhoto={currentPhoto}
+            onSelectPhoto={handleSelectPhoto}
+            onDeletePhoto={async (filename) => {
+              try {
+                const resp = await fetch(`${API_URL}/api/photos/${filename}`, { method: "DELETE" });
+                if (resp.ok) {
+                  setPhotos((prev) => prev.filter((ph) => ph.filename !== filename));
+                }
+                return resp;
+              } catch (e) {
+                throw e;
+              }
+            }}
+            onRefreshPhotos={loadPhotos}
+          />
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 

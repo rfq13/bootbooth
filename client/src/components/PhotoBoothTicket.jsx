@@ -12,6 +12,7 @@ const PhotoBoothTicket = ({
   qrCode,
   domRef, // optional: ref dari parent untuk proses cetak
   enableInternalExport = false, // default: sembunyikan tombol internal
+  onClickSlot,
 }) => {
   const ticketRef = useRef(null);
 
@@ -293,13 +294,14 @@ const PhotoBoothTicket = ({
                           boxShadow:
                             "0 8px 24px rgba(0,0,0,0.3), 0 0 20px rgba(255,215,0,0.3), inset 0 2px 8px rgba(255,255,255,0.3)",
                         }}
+                        onClick={() => onClickSlot && onClickSlot(idx)}
                       >
                         <div className="relative w-full h-full bg-white rounded-lg overflow-hidden">
-                          <img
-                            src={photo}
-                            alt={`Photo ${idx + 1}`}
-                            className="w-full h-full object-cover"
-                          />
+                          {photo ? (
+                            <img src={photo} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-secondary-500 text-sm">Klik untuk pilih foto</div>
+                          )}
                           {/* Vintage photo corners */}
                           <div className="absolute top-0 left-0 w-6 h-6 border-l-4 border-t-4 border-booth-gold/70" />
                           <div className="absolute top-0 right-0 w-6 h-6 border-r-4 border-t-4 border-booth-pink/70" />

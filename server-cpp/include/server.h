@@ -10,25 +10,112 @@
 #include <chrono>
 #include <sstream>
 #include <fstream>
-#include <filesystem>
 #include <iomanip>
 #include <ctime>
 #include <memory>
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
 #include <cstring>
-#include <csignal>
-#include <sys/wait.h>
-#include <openssl/sha.h>
 #include <algorithm>
 #include <random>
+
+// Kompabilitas Windows
+#ifdef _WIN32
+    #define WIN32_LEAN_AND_MEAN
+    #include <windows.h>
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #include <io.h>
+    #include <process.h>
+    #include <direct.h>
+    
+    // Definisi tipe data untuk Windows
+    typedef int pid_t;
+    typedef int socklen_t;
+    typedef SSIZE_T ssize_t;
+    
+    // Makro untuk kompatibilitas
+    #define close(s) closesocket(s)
+    #define read(s, buf, len) recv(s, buf, len, 0)
+    #define write(s, buf, len) send(s, buf, len, 0)
+    #define mkdir(path, mode) _mkdir(path)
+    #define rmdir _rmdir
+    #define unlink _unlink
+    #define access _access
+    #define F_OK 0
+    #define W_OK 2
+    #define R_OK 4
+    
+    // Definisi untuk fungsi-fungsi POSIX
+    inline pid_t fork() { return -1; } // Tidak didukung di Windows
+    inline pid_t waitpid(pid_t pid, int* status, int options) { return -1; }
+    inline int kill(pid_t pid, int sig) { return -1; }
+    inline pid_t getpid() { return _getpid(); }
+    
+    // Signal handling untuk Windows
+    #define SIGINT 2
+    #define SIGTERM 15
+    
+    // OpenSSL compatibility untuk Windows
+    #define SHA_DIGEST_LENGTH 20
+    
+#else
+    // Linux/Unix
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <unistd.h>
+    #include <fcntl.h>
+    #include <sys/stat.h>
+    #include <csignal>
+    #include <sys/wait.h>
+#endif
+
+// OpenSSL - hanya include jika tersedia
+#ifdef HAVE_OPENSSL
+    #include <openssl/sha.h>
+#else
+    // Fallback definisi jika OpenSSL tidak tersedia
+    #define SHA_DIGEST_LENGTH 20
+    // Deklarasi fungsi SHA1 stub
+    inline int SHA1(const unsigned char *d, size_t n, unsigned char *md) {
+        // Stub implementation - return error
+        return -1;
+    }
+#endif
+
+// Filesystem operations wrapper untuk kompatibilitas
+namespace filesystem_compat {
+    inline bool exists(const std::string& path) {
+#ifdef _WIN32
+        return _access(path.c_str(), F_OK) == 0;
+#else
+        return access(path.c_str(), F_OK) == 0;
+#endif
+    }
+    
+    inline bool remove(const std::string& path) {
+#ifdef _WIN32
+        return _unlink(path.c_str()) == 0;
+#else
+        return unlink(path.c_str()) == 0;
+#endif
+    }
+    
+    inline std::vector<std::string> directory_entries(const std::string& path) {
+        std::vector<std::string> entries;
+        // Implementasi sederhana, bisa diperbaiki nanti
+        return entries;
+    }
+}
+
+// Alias std::filesystem untuk kompatibilitas
+namespace std {
+    namespace filesystem {
+        using namespace filesystem_compat;
+    }
+}
 
 // Konstanta
 const int API_PORT = 3001;
