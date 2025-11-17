@@ -4,7 +4,7 @@ import CameraView from "./components/CameraView.jsx";
 import PhotoGallery from "./components/PhotoGallery.jsx";
 import Controls from "./components/Controls.jsx";
 import LayoutPage from "./components/LayoutPage.jsx";
-import { NotifyProvider } from "./components/Notify.jsx";
+import { useNotify } from "./components/Notify.jsx";
 import { appState } from "./main.jsx";
 import { SOCKET_URL, API_URL } from "./constants";
 
@@ -18,6 +18,7 @@ const socket = io(SOCKET_URL, {
 });
 
 export default function App() {
+  const notify = useNotify();
   const [socketConnected, setSocketConnected] = useState(false);
   const [cameraConnected, setCameraConnected] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
@@ -218,7 +219,7 @@ export default function App() {
 
   const handleStartPreview = () => {
     if (!cameraConnected) {
-      alert("Kamera tidak terhubung");
+      notify("warning", "Kamera tidak terhubung");
       return;
     }
 
@@ -316,15 +317,12 @@ export default function App() {
   // If layout page is shown, render it instead of the main app
   if (showLayoutPage) {
     return (
-      <NotifyProvider>
-        <LayoutPage onBack={() => setShowLayoutPage(false)} />
-      </NotifyProvider>
+      <LayoutPage onBack={() => setShowLayoutPage(false)} />
     );
   }
 
   return (
-    <NotifyProvider>
-      <div className="min-h-screen bg-gradient-to-br from-primary-100 via-primary-50 to-white">
+    <div className="min-h-screen bg-gradient-to-br from-primary-100 via-primary-50 to-white">
         <div className="container mx-auto px-6 py-8">
           {/* Header */}
           <header className="text-center mb-12">
@@ -472,7 +470,6 @@ export default function App() {
           </div>
         </div>
       </div>
-    </NotifyProvider>
   );
 }
 

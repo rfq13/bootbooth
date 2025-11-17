@@ -3,6 +3,7 @@ import { Router } from "preact-router";
 import { signal } from "@preact/signals";
 import "./index.css";
 import App from "./App.jsx";
+import { NotifyProvider } from "./components/Notify.jsx";
 
 // Global state
 const appState = signal({
@@ -17,8 +18,10 @@ const appState = signal({
 export { appState };
 
 render(
-  <Router>
-    <App path="/" />
-  </Router>,
+  <NotifyProvider>
+    <Router>
+      <App path="/" />
+    </Router>
+  </NotifyProvider>,
   document.getElementById("app")
 );

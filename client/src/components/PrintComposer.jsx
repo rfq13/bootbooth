@@ -366,27 +366,16 @@ export default function PrintComposer({
       });
       if (!resp.ok) throw new Error(`Upload gagal: ${resp.status}`);
 
-      if (window.notify) {
-        window.notify(
-          "success",
-          "Berhasil dikirim ke antrian cetak (/printqueue)"
-        );
-      } else {
-        alert("Berhasil dikirim ke antrian cetak (/printqueue)");
-      }
-    } catch (err) {
-      console.error(err);
-      if (window.notify) {
-        window.notify(
-          "error",
-          "Gagal mengupload ke antrian cetak. Cek backend."
-        );
-      } else {
-        alert("Gagal mengupload ke antrian cetak. Cek backend.");
-      }
-    } finally {
-      setIsPrinting(false);
-    }
+      notify("success", "Berhasil dikirim ke antrian cetak (/printqueue)");
+  } catch (err) {
+    console.error(err);
+    notify(
+      "error",
+      "Gagal mengupload ke antrian cetak. Cek backend."
+    );
+  } finally {
+    setIsPrinting(false);
+  }
   };
 
   return (

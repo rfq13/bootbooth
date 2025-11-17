@@ -89,6 +89,21 @@ const LayoutPage = ({ onBack }) => {
         seat: false,
       },
     },
+    {
+      id: "doubleStripFramed",
+      name: "Double Strip (Frame)",
+      description: "Setiap foto memakai frame PNG",
+      preview: "🖼️",
+      color: "from-indigo-500 to-blue-600",
+      requiredPhotos: 6,
+      settings: {
+        eventName: false,
+        date: false,
+        time: false,
+        row: false,
+        seat: false,
+      },
+    },
   ];
 
   useEffect(() => {
@@ -155,14 +170,10 @@ const LayoutPage = ({ onBack }) => {
     const requiredSlots = selectedTemplate.requiredPhotos;
     const filled = slotPhotos.filter(Boolean).length;
     if (filled < requiredSlots) {
-      if (window.notify) {
-        window.notify(
-          "warning",
-          `Lengkapi semua ${requiredSlots} slot foto terlebih dahulu!`
-        );
-      } else {
-        alert(`Lengkapi semua ${requiredSlots} slot foto terlebih dahulu!`);
-      }
+      notify(
+        "warning",
+        `Lengkapi semua ${requiredSlots} slot foto terlebih dahulu!`
+      );
       return;
     }
     try {
@@ -178,21 +189,13 @@ const LayoutPage = ({ onBack }) => {
       link.href = dataUrl;
       link.download = `layout-${selectedTemplate.id}-${Date.now()}.png`;
       link.click();
-      if (window.notify) {
-        window.notify("success", "Layout berhasil diekspor sebagai gambar!");
-      } else {
-        alert("Layout berhasil diekspor sebagai gambar!");
-      }
+      notify("success", "Layout berhasil diekspor sebagai gambar!");
     } catch (error) {
       console.error("Error printing image:", error);
-      if (window.notify) {
-        window.notify(
-          "error",
-          "Terjadi kesalahan saat mencetak foto. Silakan coba lagi."
-        );
-      } else {
-        alert("Terjadi kesalahan saat mencetak foto. Silakan coba lagi.");
-      }
+      notify(
+        "error",
+        "Terjadi kesalahan saat mencetak foto. Silakan coba lagi."
+      );
     }
   };
 

@@ -2,6 +2,7 @@ import { useRef, useState } from "preact/hooks";
 import PhotoBoothTicket from "./templates/PhotoBoothTicket";
 import PhotoStrip from "./templates/PhotoStrip";
 import DoublePhotoStrip from "./templates/DoublePhotoStrip";
+import FramedDoublePhotoStrip from "./templates/FramedDoublePhotoStrip";
 import { API_URL } from "../constants";
 
 const LayoutPreview = ({
@@ -91,6 +92,12 @@ const LayoutPreview = ({
                 </div>
               ))}
           </div>
+        ) : selectedTemplate?.id === "doubleStripFramed" ? (
+          <FramedDoublePhotoStrip
+            photos={getPhotoUrls()}
+            domRef={layoutRef}
+            onClickSlot={onOpenSlotPicker}
+          />
         ) : (
           <DoublePhotoStrip
             photos={getPhotoUrls()}
