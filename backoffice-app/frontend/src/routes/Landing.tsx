@@ -1,18 +1,82 @@
 // Komponen landing terpisah dari admin, tidak menggunakan UI dari admin
 import { Camera, Zap, ShieldCheck, Users, Star } from "lucide-react";
+import { useEffect } from "react";
 
 export default function Landing() {
+  useEffect(() => {
+    const els = Array.from(document.querySelectorAll<HTMLElement>(".reveal"));
+    let gsapRef: any = null;
+    const init = async () => {
+      try {
+        const mod = await import("gsap");
+        const st = await import("gsap/ScrollTrigger");
+        gsapRef = (mod as any).gsap || mod;
+        const ScrollTrigger = (st as any).ScrollTrigger || (st as any).default;
+        if (gsapRef && ScrollTrigger) { (gsapRef as any).registerPlugin(ScrollTrigger) }
+      } catch { gsapRef = null }
+      const io = new IntersectionObserver(entries => {
+        entries.forEach(e => {
+          if (e.isIntersecting) {
+            if (gsapRef) { (gsapRef as any).to(e.target, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }) }
+            else { e.target.classList.add("reveal-visible") }
+            io.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.15 });
+      els.forEach(el => io.observe(el));
+      const btns = Array.from(document.querySelectorAll<HTMLElement>(".btn-gradient"));
+      btns.forEach(b => {
+        b.addEventListener("mouseenter", () => { if (gsapRef) { (gsapRef as any).to(b, { scale: 1.03, duration: 0.2, ease: "power2.out" }) } });
+        b.addEventListener("mouseleave", () => { if (gsapRef) { (gsapRef as any).to(b, { scale: 1.0, duration: 0.2, ease: "power2.out" }) } });
+      });
+      const icons = Array.from(document.querySelectorAll<HTMLElement>(".icon-anim"));
+      icons.forEach(i => {
+        i.addEventListener("mouseenter", () => { if (gsapRef) { (gsapRef as any).to(i, { scale: 1.05, duration: 0.25, ease: "elastic.out(1, 0.6)" }) } });
+        i.addEventListener("mouseleave", () => { if (gsapRef) { (gsapRef as any).to(i, { scale: 1.0, duration: 0.2, ease: "power2.out" }) } });
+      });
+      const cards = Array.from(document.querySelectorAll<HTMLElement>(".card-anim"));
+      cards.forEach(c => {
+        c.addEventListener("mouseenter", () => { if (gsapRef) { (gsapRef as any).to(c, { y: -5, duration: 0.2, ease: "power2.out" }) } });
+        c.addEventListener("mouseleave", () => { if (gsapRef) { (gsapRef as any).to(c, { y: 0, duration: 0.2, ease: "power2.out" }) } });
+      });
+      if (gsapRef && (gsapRef as any).ScrollTrigger) {
+        const hero = document.querySelector<HTMLElement>("figure[aria-label='Ilustrasi layanan']");
+        if (hero) {
+          (gsapRef as any).to(hero, {
+            yPercent: -20,
+            ease: "none",
+            scrollTrigger: { trigger: hero, start: "top 75%", end: "bottom 25%", scrub: true },
+          });
+        }
+        const sections = [
+          { sel: "#features", start: "top 75%" },
+          { sel: "#testimonials", start: "top 50%" },
+          { sel: "#cta-heading", start: "top 25%" },
+        ];
+        sections.forEach(s => {
+          const el = document.querySelector<HTMLElement>(s.sel);
+          if (el) {
+            (gsapRef as any).fromTo(el, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.8, ease: "power2.out", scrollTrigger: { trigger: el, start: s.start, toggleActions: "play none none reverse" } });
+          }
+        });
+      }
+    };
+    init();
+    return () => {};
+  }, []);
   return (
-    <main id="home" className="mx-auto max-w-6xl px-4">
+    <div className="landing-wrap min-h-screen relative">
+      <div className="landing-glow" />
+      <main id="home" className="mx-auto max-w-6xl px-4">
       {/* Hero */}
       <section
         className="py-12 md:py-20 grid md:grid-cols-2 gap-8 items-center"
         aria-labelledby="hero-heading"
       >
-        <div>
+        <div className="animate-[floatY_8s_ease-in-out_infinite] reveal">
           <h1
             id="hero-heading"
-            className="text-4xl md:text-5xl font-bold leading-tight"
+            className="text-4xl md:text-5xl font-bold leading-tight text-gradient"
           >
             Kelola Booth Foto Anda Secara Real‑Time
           </h1>
@@ -23,30 +87,36 @@ export default function Landing() {
           <div className="mt-6 flex gap-3">
             <a
               href="/login"
-              className="inline-flex h-10 px-5 items-center rounded-md bg-[#0ea5e9] text-white text-sm hover:bg-[#0d8fd0]"
+              className="inline-flex h-10 px-5 items-center rounded-md btn-gradient text-sm"
             >
               Masuk Backoffice
             </a>
             <a
               href="#features"
-              className="inline-flex h-10 px-5 items-center rounded-md bg-[#e5e7eb] text-[#111827] text-sm hover:bg-[#dfe3e7]"
+              className="inline-flex h-10 px-5 items-center rounded-md bg-white/80 text-[#111827] text-sm hover:bg-white card-soft"
             >
               Lihat Fitur
             </a>
           </div>
         </div>
         <figure
-          className="relative w-full h-64 md:h-80 rounded-lg overflow-hidden shadow-card"
+          className="relative w-full h-64 md:h-80 rounded-lg overflow-hidden shadow-card animate-[floatY_10s_ease-in-out_infinite] reveal"
           aria-label="Ilustrasi layanan"
         >
-          <img
-            src="/placeholder.svg"
-            alt="Ilustrasi SnapStudio"
-            loading="lazy"
-            className="w-full h-full object-cover"
-          />
+          <picture>
+            <source srcSet="https://images.pexels.com/photos/1995123/pexels-photo-1995123.jpeg?auto=compress&cs=tinysrgb&format=webp&w=1920" type="image/webp" />
+            <img
+              src="https://images.pexels.com/photos/1995123/pexels-photo-1995123.jpeg?auto=compress&cs=tinysrgb&w=1920"
+              alt="Pengunjung berpose di photobooth dengan pencahayaan estetik"
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
+              className="w-full h-full object-cover"
+            />
+          </picture>
         </figure>
       </section>
+      <div className="section-divider my-6" />
 
       {/* Features */}
       <section
@@ -58,7 +128,7 @@ export default function Landing() {
           Fitur Utama
         </h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="p-5 rounded-lg border border-[#e5e7eb] bg-white shadow-card">
+          <div className="p-5 rounded-lg border border-[#e5e7eb] card-soft shadow-card reveal">
             <div className="flex items-center gap-3 mb-3">
               <Camera aria-hidden size={20} />
               <span className="font-semibold">Manajemen Sesi</span>
@@ -68,7 +138,7 @@ export default function Landing() {
               override.
             </p>
           </div>
-          <div className="p-5 rounded-lg border border-[#e5e7eb] bg-white shadow-card">
+          <div className="p-5 rounded-lg border border-[#e5e7eb] card-soft shadow-card reveal">
             <div className="flex items-center gap-3 mb-3">
               <ShieldCheck aria-hidden size={20} />
               <span className="font-semibold">Pembayaran Aman</span>
@@ -78,7 +148,7 @@ export default function Landing() {
               secara real‑time.
             </p>
           </div>
-          <div className="p-5 rounded-lg border border-[#e5e7eb] bg-white shadow-card">
+          <div className="p-5 rounded-lg border border-[#e5e7eb] card-soft shadow-card reveal">
             <div className="flex items-center gap-3 mb-3">
               <Zap aria-hidden size={20} />
               <span className="font-semibold">Realtime Events</span>
@@ -90,6 +160,7 @@ export default function Landing() {
           </div>
         </div>
       </section>
+      <div className="section-divider my-6" />
 
       {/* Testimonials */}
       <section
@@ -155,7 +226,7 @@ export default function Landing() {
 
       {/* Final CTA */}
       <section className="py-12" aria-labelledby="cta-heading">
-        <div className="p-6 rounded-lg border border-[#e5e7eb] bg-white shadow-card flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="p-6 rounded-lg border border-[#e5e7eb] card-soft shadow-card flex flex-col md:flex-row items-center justify-between gap-4 reveal">
           <div>
             <h2 id="cta-heading" className="text-xl font-semibold">
               Siap meningkatkan pengalaman booth Anda?
@@ -166,12 +237,13 @@ export default function Landing() {
           </div>
           <a
             href="/login"
-            className="inline-flex h-9 px-4 items-center rounded-md bg-[#0ea5e9] text-white text-sm hover:bg-[#0d8fd0]"
+            className="inline-flex h-9 px-4 items-center rounded-md btn-gradient text-sm"
           >
             Mulai Sekarang
           </a>
         </div>
       </section>
-    </main>
+      </main>
+    </div>
   );
 }

@@ -7,7 +7,8 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-white hover:bg-[#1f2024]'
+        default: 'bg-primary text-white hover:bg-[#1f2024]',
+        accent: 'btn-gradient'
       },
       size: {
         default: 'h-9 px-4 py-2',
@@ -24,3 +25,5 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(({ className, v
   <button ref={ref} className={cn(buttonVariants({ variant, size }), className)} {...props} />
 ))
 Button.displayName = 'Button'
+// Tokens: uses var(--accent-gradient) via 'accent' variant for branding consistency.
+// Variants: default (bg-primary), accent (gradient). Size: default, sm.

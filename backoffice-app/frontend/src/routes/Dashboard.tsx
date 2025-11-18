@@ -10,6 +10,33 @@ export default function Dashboard() {
   const [events, setEvents] = useState<WSMessage[]>([])
   const [realtimeOk, setRealtimeOk] = useState<boolean>(true)
   useEffect(() => {
+    try {
+      (async () => {
+        const mod = await import('gsap');
+        const st = await import('gsap/ScrollTrigger');
+        const gs = (mod as any).gsap || mod;
+        const ScrollTrigger = (st as any).ScrollTrigger || (st as any).default;
+        if (gs && ScrollTrigger) {
+          (gs as any).registerPlugin(ScrollTrigger);
+          const header = document.querySelector<HTMLElement>('header');
+          if (header) {
+            (gs as any).fromTo(header, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.6, ease: 'power2.out', scrollTrigger: { trigger: header, start: 'top 75%', toggleActions: 'play none none reverse' } });
+          }
+          const grids = Array.from(document.querySelectorAll<HTMLElement>('.grid'));
+          grids.forEach(g => { (gs as any).fromTo(g, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.6, ease: 'power2.out', scrollTrigger: { trigger: g, start: 'top 50%', toggleActions: 'play none none reverse' } }) });
+          const icons = Array.from(document.querySelectorAll<HTMLElement>(".icon-anim"));
+          icons.forEach(i => {
+            i.addEventListener("mouseenter", () => { (gs as any).to(i, { scale: 1.05, duration: 0.25, ease: "elastic.out(1, 0.6)" }) });
+            i.addEventListener("mouseleave", () => { (gs as any).to(i, { scale: 1.0, duration: 0.2, ease: "power2.out" }) });
+          });
+          const cards = Array.from(document.querySelectorAll<HTMLElement>(".card-anim"));
+          cards.forEach(c => {
+            c.addEventListener("mouseenter", () => { (gs as any).to(c, { y: -5, duration: 0.2, ease: 'power2.out' }) });
+            c.addEventListener("mouseleave", () => { (gs as any).to(c, { y: 0, duration: 0.2, ease: 'power2.out' }) });
+          });
+        }
+      })();
+    } catch {}
     let ws: any
     try {
       ws = connect(msg => setEvents(prev => [msg, ...prev].slice(0, 10)))
@@ -23,15 +50,15 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <header className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold">Welcome Back, Mahfuzul!</h2>
-          <p className="text-sm text-[#6b7280]">Here's what happening with your store today</p>
+        <div className="reveal">
+          <h2 className="text-2xl font-semibold text-gradient">Welcome Back, Mahfuzul!</h2>
+          <p className="text-sm" style={{ color: 'var(--muted)' }}>Here's what happening with your store today</p>
         </div>
         <div className="flex gap-2">
           <select className="h-9 rounded-md border border-[#e5e7eb] bg-white px-2 text-sm">
             <option>Previous Year</option>
           </select>
-          <Button>View All Time</Button>
+          <Button variant="accent">View All Time</Button>
         </div>
       </header>
       {!realtimeOk && <div className="text-sm text-[#dc3545]">Realtime offline: configure VITE_SSE_URL or VITE_WS_URL</div>}
@@ -97,21 +124,21 @@ export default function Dashboard() {
                   <Td>Peterson Jack</Td>
                   <Td>#8441573</Td>
                   <Td>27 Jun 2025</Td>
-                  <Td><Badge className="bg-[#fff0c2] text-[#ffc107]">Pending</Badge></Td>
+                  <Td><Badge className="badge-warning">Pending</Badge></Td>
                 </Tr>
                 <Tr>
                   <Td>iPhone 15 Pro</Td>
                   <Td>Michel Datta</Td>
                   <Td>#2457841</Td>
                   <Td>26 Jun 2025</Td>
-                  <Td><Badge className="bg-[#f8d7da] text-[#dc3545]">Canceled</Badge></Td>
+                  <Td><Badge className="badge-danger">Canceled</Badge></Td>
                 </Tr>
                 <Tr>
                   <Td>Headphone</Td>
                   <Td>Jesiyal Rose</Td>
                   <Td>#1024784</Td>
                   <Td>20 Jun 2025</Td>
-                  <Td><Badge className="bg-[#d4edda] text-[#22c55e]">Shipped</Badge></Td>
+                  <Td><Badge className="badge-success">Shipped</Badge></Td>
                 </Tr>
               </Tbody>
             </Table>
