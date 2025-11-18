@@ -1,0 +1,38 @@
+name: Backoffice CI
+
+on:
+  push:
+    paths:
+      - 'backoffice-app/**'
+  pull_request:
+    paths:
+      - 'backoffice-app/**'
+
+jobs:
+  frontend-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backoffice-app/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test --if-present
+
+  backend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backoffice-app/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - run: go build ./...
+      - run: go vet ./...
