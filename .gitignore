@@ -110,3 +110,5 @@ Thumbs.db
 tmp/
 temp/
 server-cpp/bin
+backoffice-app/frontend/dist
+backoffice-app/frontend/dist-ssr
