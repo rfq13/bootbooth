@@ -1,6 +1,7 @@
 package backend
 
 import (
+    "database/sql"
     "crypto/hmac"
     "crypto/rand"
     "crypto/sha256"
@@ -19,7 +20,8 @@ func buildRouter() http.Handler {
     s := NewService(newRepo())
     mux := http.NewServeMux()
     hub := newHub()
-    booths := newBoothHub()
+    var db = func() *sql.DB { d, _ := NewDB(); return d }()
+    booths := newBoothHub(db)
     // public endpoints
     mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"ok": "true"}) })
     mux.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
@@ -87,6 +89,7 @@ func buildRouter() http.Handler {
     })
     authMux.Handle("/outlets", requireRole("super_admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { v, _ := s.ListOutlets(r.Context()); writeJSON(w, 200, v) })))
     authMux.Handle("/booths", requireRole("super_admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, booths.list()) })))
+    authMux.Handle("/booths/db", requireRole("super_admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, booths.listDB()) })))
     authMux.Handle("/admin-users", requireRole("super_admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { v, _ := s.ListAdminUsers(r.Context()); writeJSON(w, 200, v) })))
     authMux.HandleFunc("/bookings", func(w http.ResponseWriter, r *http.Request) { v, _ := s.ListBookings(r.Context(), r.URL.Query().Get("status")); writeJSON(w, 200, v) })
     mux.HandleFunc("/booking", func(w http.ResponseWriter, r *http.Request) {

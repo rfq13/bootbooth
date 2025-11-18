@@ -6,10 +6,19 @@ import Controls from "./components/Controls.jsx";
 import LayoutPage from "./components/LayoutPage.jsx";
 import { useNotify } from "./components/Notify.jsx";
 import { appState } from "./main.jsx";
-import { SOCKET_URL, API_URL } from "./constants";
+import { SOCKET_URL, API_URL, BACKOFFICE_SOCKET_URL } from "./constants";
 
 const socket = io(SOCKET_URL, {
   transports: ["websocket", "polling"],
+  path: "/socket.io/",
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+  timeout: 5000,
+});
+
+const boSocket = io(BACKOFFICE_SOCKET_URL, {
+  transports: ["polling"],
   path: "/socket.io/",
   reconnection: true,
   reconnectionAttempts: 5,
@@ -94,6 +103,15 @@ export default function App() {
       // Check camera status when reconnected
       checkCameraStatus();
     });
+
+    boSocket.on("connect", () => {
+      const name = import.meta.env.VITE_BOOTH_NAME || "LocalBooth";
+      const location = import.meta.env.VITE_BOOTH_LOCATION || "Unknown";
+      const outletId = import.meta.env.VITE_OUTLET_ID || "out-1";
+      boSocket.emit("register", { name, location, outlet_id: outletId });
+    });
+
+    boSocket.on("disconnect", () => {});
 
     socket.on("previewFrame", (data) => {
       if (data.image) {
@@ -214,6 +232,8 @@ export default function App() {
       socket.off("mjpeg-stream-started");
       socket.off("mjpeg-stream-stopped");
       socket.off("camera-detected");
+      boSocket.off("connect");
+      boSocket.off("disconnect");
     };
   }, []);
 
