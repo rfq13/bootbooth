@@ -1,5 +1,3 @@
-version: "3.8"
-
 # Compose untuk Backoffice (Frontend + Backend)
 # Jalankan: docker-compose up -d
 
@@ -53,7 +51,6 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
-
 # Tips:
 # - Siapkan file .env di root repo atau variable environment host untuk mengisi nilai di atas.
 # - REDIS_URL dan DATABASE_URL dikonsumsi aplikasi jika diaktifkan; layanan database tidak dijalankan di compose ini.
