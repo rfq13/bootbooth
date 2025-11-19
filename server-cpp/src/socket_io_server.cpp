@@ -374,6 +374,14 @@ void SocketIOServer::handleHttpRequest(int clientSocket, const std::string& requ
         send(clientSocket, response.c_str(), response.length(), 0);
         return;
     }
+    if (path != "/api/identity" && photoBoothServer && !photoBoothServer->identityRegistered()) {
+        std::string forbidden = "HTTP/1.1 403 Forbidden\r\n"
+                             "Access-Control-Allow-Origin: *\r\n"
+                             "Content-Type: application/json\r\n"
+                             "Content-Length: 41\r\n\r\n{\"error\":\"identity_required\"}";
+        send(clientSocket, forbidden.c_str(), forbidden.length(), 0);
+        return;
+    }
     if (path == "/api/status" && method == "GET") {
         handleApiStatusRequest(clientSocket);
     } else if (path == "/api/photos" && method == "GET") {
@@ -393,6 +401,60 @@ void SocketIOServer::handleHttpRequest(int clientSocket, const std::string& requ
         }
         auto queryParams = parseQueryString(query);
         handleImageRequest(clientSocket, filename, queryParams);
+    } else if (path == "/api/identity" && method == "GET") {
+        auto st = photoBoothServer->getIdentityStore();
+        std::map<std::string, std::string> data;
+        if (st && st->hasIdentity()) {
+            auto v = st->getLatest();
+            data = v;
+            data["success"] = "true";
+        } else {
+            data["success"] = "false";
+        }
+        std::string json = generateJsonResponse(data);
+        std::string resp = generateHttpResponse(json, "application/json");
+        send(clientSocket, resp.c_str(), resp.length(), 0);
+    } else if (path == "/api/identity" && method == "POST") {
+        size_t clPos = request.find("Content-Length:");
+        size_t bodyPos = request.find("\r\n\r\n");
+        std::string body;
+        if (clPos != std::string::npos && bodyPos != std::string::npos) {
+            size_t clEnd = request.find("\r\n", clPos);
+            std::string clStr = request.substr(clPos + 15, clEnd - clPos - 15);
+            int len = 0; try { len = std::stoi(clStr); } catch (...) { len = 0; }
+            if (len > 0) {
+                std::string rest;
+                rest.resize(static_cast<size_t>(len));
+                if (!recvExact(clientSocket, &rest[0], static_cast<size_t>(len))) {
+                    std::string bad = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
+                    send(clientSocket, bad.c_str(), bad.length(), 0);
+                    return;
+                }
+                body = rest;
+            }
+        }
+        std::map<std::string, std::string> parsed;
+        parseJsonObject(body, parsed, "");
+        std::string boothName = parsed["booth_name"];
+        std::string enc;
+        if (parsed.count("encrypted_data")) enc = parsed["encrypted_data"];
+        std::string locStr;
+        if (parsed.count("location.lat") && parsed.count("location.lng")) {
+            locStr = parsed["location.lat"] + "," + parsed["location.lng"];
+        } else if (parsed.count("location")) {
+            locStr = parsed["location"];
+        }
+        bool ok = false;
+        if (!boothName.empty() && !locStr.empty()) {
+            auto st = photoBoothServer->getIdentityStore();
+            if (st) ok = st->save(boothName, locStr, enc);
+        }
+        std::map<std::string, std::string> res;
+        res["success"] = ok ? "true" : "false";
+        if (!ok) res["error"] = "store_failed";
+        std::string json = generateJsonResponse(res);
+        std::string resp = generateHttpResponse(json, "application/json");
+        send(clientSocket, resp.c_str(), resp.length(), 0);
     } else {
         std::string notFound = "HTTP/1.1 404 Not Found\r\n"
                              "Access-Control-Allow-Origin: *\r\n"

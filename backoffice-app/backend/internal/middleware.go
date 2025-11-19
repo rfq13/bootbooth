@@ -30,16 +30,22 @@ func withLogging(next http.Handler) http.Handler {
     })
 }
 
-var rl = rate.NewLimiter(rate.Every(time.Second), 10)
+var ipLimiters = struct{ m map[string]*rate.Limiter }{ m: map[string]*rate.Limiter{} }
+func getLimiter(ip string) *rate.Limiter {
+    if l, ok := ipLimiters.m[ip]; ok { return l }
+    l := rate.NewLimiter(rate.Every(time.Minute/10), 10)
+    ipLimiters.m[ip] = l
+    return l
+}
 
 func withRateLimit(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-        if !rl.Allow() {
+        l := getLimiter(ip)
+        if !l.Allow() {
             writeError(w, http.StatusTooManyRequests, "rate_limit")
             return
         }
-        _ = ip
         next.ServeHTTP(w, r)
     })
 }

@@ -161,6 +161,21 @@ func buildRouter() http.Handler {
         v, _ := s.Finish(r.Context(), id)
         writeJSON(w, 200, v)
     })
+    mux.HandleFunc("/api/booth/register", func(w http.ResponseWriter, r *http.Request) {
+        if r.Method != http.MethodPost { writeError(w, 405, "method_not_allowed"); return }
+        type loc struct{ Lat float64 `json:"lat"`; Lng float64 `json:"lng"` }
+        var body struct{ BoothName string `json:"booth_name"`; Location loc `json:"location"` }
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil { writeError(w, 400, "invalid_json"); return }
+        name := strings.TrimSpace(body.BoothName)
+        if len(name) < 3 || len(name) > 50 { writeError(w, 400, "invalid_name"); return }
+        lat := body.Location.Lat
+        lng := body.Location.Lng
+        if lat < -90 || lat > 90 || lng < -180 || lng > 180 { writeError(w, 400, "invalid_location"); return }
+        id := newUUID()
+        createdAt := time.Now().UTC().Format(time.RFC3339)
+        identity := map[string]any{"id": id, "booth_name": name, "location": map[string]any{"lat": lat, "lng": lng}, "created_at": createdAt}
+        writeJSON(w, 200, map[string]any{"success": true, "data": identity})
+    })
     mux.Handle("/", requireAuth(requireCSRF(authMux)))
     return withCORS(withRateLimit(withLogging(mux)))
 }
@@ -254,6 +269,8 @@ func newUUID() string {
     b[8] = (b[8] & 0x3f) | 0x80
     return hex.EncodeToString(b[0:4]) + "-" + hex.EncodeToString(b[4:6]) + "-" + hex.EncodeToString(b[6:8]) + "-" + hex.EncodeToString(b[8:10]) + "-" + hex.EncodeToString(b[10:16])
 }
+
+
 
 // SSE hub
 type hub struct{ mu sync.Mutex; subs map[chan []byte]struct{} }

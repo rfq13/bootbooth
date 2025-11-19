@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Backoffice API
-  version: 0.1.0
+  version: 0.2.0
 servers:
   - url: https://localhost:3002
 security:
@@ -137,3 +137,39 @@ paths:
                 arrival_tolerance_minutes: { type: integer }
       responses:
         '200': { description: OK }
+  /api/booth/register:
+    post:
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                booth_name: { type: string, minLength: 3, maxLength: 50 }
+                location:
+                  type: object
+                  properties:
+                    lat: { type: number, minimum: -90, maximum: 90 }
+                    lng: { type: number, minimum: -180, maximum: 180 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      booth_name: { type: string }
+                      location:
+                        type: object
+                        properties:
+                          lat: { type: number }
+                          lng: { type: number }
+                      created_at: { type: string }

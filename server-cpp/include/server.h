@@ -172,6 +172,8 @@ class PhotoBoothServer;
 
 class SocketIOServer;
 
+class BoothIdentityStore;
+
 // Kelas untuk efek gambar
 class ImageEffects {
 private:
@@ -341,6 +343,7 @@ private:
     MJPEGServer* mjpegServer;
     SocketIOServer* socketIOServer;
     bool running;
+    BoothIdentityStore* identityStore;
     
 public:
     PhotoBoothServer(int apiPort = API_PORT, int mjpegPort = MJPEG_PORT);
@@ -349,10 +352,12 @@ public:
     bool start();
     bool stop();
     bool isRunning() const;
+    bool identityRegistered() const;
     
     // Getter methods
     GPhotoWrapper* getGPhotoWrapper() { return gphoto; }
     SocketIOServer* getSocketIOServer() { return socketIOServer; }
+    BoothIdentityStore* getIdentityStore() { return identityStore; }
     std::vector<Photo> getPhotosList();
     bool deletePhoto(const std::string& filename);
     

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import io from "socket.io-client";
+import BoothRegistration from "./components/BoothRegistration.jsx";
 import CameraView from "./components/CameraView.jsx";
 import PhotoGallery from "./components/PhotoGallery.jsx";
 import Controls from "./components/Controls.jsx";
@@ -50,6 +51,8 @@ export default function App() {
   const [songTitle, setSongTitle] = useState("About You");
   const [songArtist, setSongArtist] = useState("The 1975");
   const [showLayoutPage, setShowLayoutPage] = useState(false);
+  const [identityReady, setIdentityReady] = useState(false);
+  const [identity, setIdentity] = useState(null);
 
   const checkCameraStatus = async () => {
     try {
@@ -77,165 +80,63 @@ export default function App() {
   };
 
   useEffect(() => {
+    const checkIdentity = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/identity`);
+        const data = await res.json();
+        if (data.success) { setIdentityReady(true); setIdentity(data); } else { setIdentityReady(false); }
+      } catch (_) { setIdentityReady(false); }
+    };
+    checkIdentity();
+  }, []);
+
+  useEffect(() => {
+    if (!identityReady) return;
     checkCameraStatus();
     loadPhotos(setPhotos);
 
     socket.on("connect", () => {
       setSocketConnected(true);
-      console.log("Terhubung ke server");
-      // Check camera status when connected
       checkCameraStatus();
     });
-
-    socket.on("disconnect", (reason) => {
-      setSocketConnected(false);
-      console.log("Terputus dari server:", reason);
-    });
-
-    socket.on("connect_error", (error) => {
-      console.error("Socket connection error:", error);
-      setSocketConnected(false);
-    });
-
-    socket.on("reconnect", (attemptNumber) => {
-      console.log("Reconnected to server after", attemptNumber, "attempts");
-      setSocketConnected(true);
-      // Check camera status when reconnected
-      checkCameraStatus();
-    });
+    socket.on("disconnect", (reason) => { setSocketConnected(false); });
+    socket.on("connect_error", () => { setSocketConnected(false); });
+    socket.on("reconnect", () => { setSocketConnected(true); checkCameraStatus(); });
 
     boSocket.on("connect", () => {
-      const name = import.meta.env.VITE_BOOTH_NAME || "LocalBooth";
-      const location = import.meta.env.VITE_BOOTH_LOCATION || "Unknown";
-      const outletId = import.meta.env.VITE_OUTLET_ID || "out-1";
-      boSocket.emit("register", { name, location, outlet_id: outletId });
+      if (identity && identity.booth_name) {
+        const name = identity.booth_name;
+        const loc = identity.location || {};
+        const location = typeof loc === "string" ? loc : `${loc.lat || 0},${loc.lng || 0}`;
+        const outletId = "out-1";
+        boSocket.emit("register", { name, location, outlet_id: outletId });
+      }
     });
-
     boSocket.on("disconnect", () => {});
 
-    socket.on("previewFrame", (data) => {
-      if (data.image) {
-        setPreviewImage(data.image);
-      }
-    });
-
+    socket.on("previewFrame", (data) => { if (data.image) setPreviewImage(data.image); });
     socket.on("photoCaptured", (data) => {
-      console.log("Foto diambil:", data);
-      // Update photos list
       loadPhotos(setPhotos);
-      // Update global state
-      appState.value = {
-        ...appState.value,
-        photos: [data, ...appState.value.photos],
-        currentPhoto: data,
-        isCapturing: false,
-        flash: true,
-      };
-
-      // Remove flash effect after animation
-      setTimeout(() => {
-        appState.value = {
-          ...appState.value,
-          flash: false,
-        };
-      }, 300);
+      appState.value = { ...appState.value, photos: [data, ...appState.value.photos], currentPhoto: data, isCapturing: false, flash: true };
+      setTimeout(() => { appState.value = { ...appState.value, flash: false }; }, 300);
     });
-
     socket.on("photoDeleted", (data) => {
-      console.log("Foto dihapus:", data);
-      // Update photos list
       loadPhotos(setPhotos);
-      // Update global state
-      appState.value = {
-        ...appState.value,
-        photos: appState.value.photos.filter(
-          (photo) => photo.Filename !== data.filename
-        ),
-      };
-
-      // If the deleted photo was the current photo, clear it
-      if (
-        appState.value.currentPhoto &&
-        appState.value.currentPhoto.Filename === data.filename
-      ) {
-        appState.value = {
-          ...appState.value,
-          currentPhoto: null,
-        };
-      }
+      appState.value = { ...appState.value, photos: appState.value.photos.filter((photo) => photo.Filename !== data.filename) };
+      if (appState.value.currentPhoto && appState.value.currentPhoto.Filename === data.filename) { appState.value = { ...appState.value, currentPhoto: null }; }
     });
-
-    socket.on("preview-started", (data) => {
-      console.log("Preview dimulai:", data);
-      if (data.success) {
-        setIsPreviewActive(true);
-        setMjpegBust(Date.now());
-        // Clear current photo when preview starts to prioritize live preview
-        appState.value = {
-          ...appState.value,
-          currentPhoto: null,
-        };
-      }
-    });
-
-    socket.on("preview-stopped", (data) => {
-      console.log("Preview dihentikan:", data);
-      setIsPreviewActive(false);
-      setPreviewImage(null);
-      setMjpegStreamUrl(null);
-    });
-
-    socket.on("mjpeg-stream-started", (data) => {
-      console.log("MJPEG stream dimulai:", data);
-      if (data.success) {
-        setMjpegStreamUrl(data.streamUrl);
-        setMjpegBust(Date.now());
-        setIsPreviewActive(true);
-        // Clear current photo when MJPEG stream starts to prioritize live preview
-        appState.value = {
-          ...appState.value,
-          currentPhoto: null,
-        };
-      }
-    });
-
-    socket.on("mjpeg-stream-stopped", (data) => {
-      console.log("MJPEG stream dihentikan:", data);
-      setMjpegStreamUrl(null);
-      setMjpegBust(0);
-      setIsPreviewActive(false);
-      setPreviewImage(null);
-    });
-
-    socket.on("camera-detected", (data) => {
-      console.log("Kamera terdeteksi:", data);
-      if (data.success !== undefined) {
-        setCameraConnected(data.success);
-        // Update global state
-        appState.value = {
-          ...appState.value,
-          cameraConnected: data.success,
-        };
-      }
-    });
+    socket.on("preview-started", (data) => { if (data.success) { setIsPreviewActive(true); setMjpegBust(Date.now()); appState.value = { ...appState.value, currentPhoto: null }; } });
+    socket.on("preview-stopped", () => { setIsPreviewActive(false); setPreviewImage(null); setMjpegStreamUrl(null); });
+    socket.on("mjpeg-stream-started", (data) => { if (data.success) { setMjpegStreamUrl(data.streamUrl); setMjpegBust(Date.now()); setIsPreviewActive(true); appState.value = { ...appState.value, currentPhoto: null }; } });
+    socket.on("mjpeg-stream-stopped", () => { setMjpegStreamUrl(null); setMjpegBust(0); setIsPreviewActive(false); setPreviewImage(null); });
+    socket.on("camera-detected", (data) => { if (data.success !== undefined) { setCameraConnected(data.success); appState.value = { ...appState.value, cameraConnected: data.success }; } });
 
     return () => {
-      socket.off("connect");
-      socket.off("disconnect");
-      socket.off("connect_error");
-      socket.off("reconnect");
-      socket.off("previewFrame");
-      socket.off("photoCaptured");
-      socket.off("photoDeleted");
-      socket.off("preview-started");
-      socket.off("preview-stopped");
-      socket.off("mjpeg-stream-started");
-      socket.off("mjpeg-stream-stopped");
-      socket.off("camera-detected");
-      boSocket.off("connect");
-      boSocket.off("disconnect");
+      socket.off("connect"); socket.off("disconnect"); socket.off("connect_error"); socket.off("reconnect");
+      socket.off("previewFrame"); socket.off("photoCaptured"); socket.off("photoDeleted"); socket.off("preview-started"); socket.off("preview-stopped"); socket.off("mjpeg-stream-started"); socket.off("mjpeg-stream-stopped"); socket.off("camera-detected");
+      boSocket.off("connect"); boSocket.off("disconnect");
     };
-  }, []);
+  }, [identityReady, identity]);
 
   const handleStartPreview = () => {
     if (!cameraConnected) {
@@ -335,6 +236,9 @@ export default function App() {
   };
 
   // If layout page is shown, render it instead of the main app
+  if (!identityReady) {
+    return <BoothRegistration onRegistered={(id) => { setIdentityReady(true); setIdentity(id); }} />;
+  }
   if (showLayoutPage) {
     return (
       <LayoutPage onBack={() => setShowLayoutPage(false)} />

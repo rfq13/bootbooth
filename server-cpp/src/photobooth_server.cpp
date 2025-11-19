@@ -1,4 +1,5 @@
 #include "../include/server.h"
+#include "../include/booth_identity.h"
 
 PhotoBoothServer::PhotoBoothServer(int apiPort, int mjpegPort)
     : apiPort(apiPort), mjpegPort(mjpegPort), running(false) {
@@ -7,6 +8,9 @@ PhotoBoothServer::PhotoBoothServer(int apiPort, int mjpegPort)
     gphoto = new GPhotoWrapper("uploads", "previews");
     mjpegServer = new MJPEGServer(mjpegPort);
     socketIOServer = new SocketIOServer(apiPort, this);
+    identityStore = new BoothIdentityStore();
+    createDirectories("data");
+    identityStore->init("data");
 }
 
 PhotoBoothServer::~PhotoBoothServer() {
@@ -14,6 +18,7 @@ PhotoBoothServer::~PhotoBoothServer() {
     delete gphoto;
     delete mjpegServer;
     delete socketIOServer;
+    delete identityStore;
 }
 
 bool PhotoBoothServer::start() {
@@ -44,6 +49,11 @@ bool PhotoBoothServer::stop() {
 
 bool PhotoBoothServer::isRunning() const {
     return running;
+}
+
+bool PhotoBoothServer::identityRegistered() const {
+    if (!identityStore) return false;
+    return identityStore->hasIdentity();
 }
 
 std::vector<Photo> PhotoBoothServer::getPhotosList() {
@@ -118,6 +128,9 @@ void PhotoBoothServer::handleImageRequest(int clientSocket, const std::string& f
 }
 
 void PhotoBoothServer::handleDetectCameraEvent(int clientSocket) {
+    if (!identityRegistered()) {
+        std::map<std::string, std::string> resp; resp["success"] = "false"; resp["error"] = "identity_required"; if (socketIOServer) { socketIOServer->emitToClient(clientSocket, "camera-detected", resp); } return;
+    }
     std::cout << "📷 Detecting cameras..." << std::endl;
     std::vector<Camera> cameras = gphoto->detectCamera();
     bool connected = !cameras.empty();
@@ -142,6 +155,7 @@ void PhotoBoothServer::handleDetectCameraEvent(int clientSocket) {
 }
 
 void PhotoBoothServer::handleStartPreviewEvent(int clientSocket, const std::map<std::string, std::string>& data) {
+    if (!identityRegistered()) { std::map<std::string, std::string> r; r["success"] = "false"; r["error"] = "identity_required"; if (socketIOServer) { socketIOServer->emitToClient(clientSocket, "preview-started", r); } return; }
     std::cout << "📹 Starting preview stream..." << std::endl;
     if (mjpegServer->isActive()) {
         std::cout << "⚠️ Stopping existing stream before starting new one..." << std::endl;
@@ -196,6 +210,7 @@ void PhotoBoothServer::handleStartPreviewEvent(int clientSocket, const std::map<
 }
 
 void PhotoBoothServer::handleStopPreviewEvent(int clientSocket) {
+    if (!identityRegistered()) { return; }
     std::cout << "🛑 Stopping preview stream..." << std::endl;
     mjpegServer->stopStream();
     gphoto->stopPreviewStream();
@@ -208,6 +223,7 @@ void PhotoBoothServer::handleStopPreviewEvent(int clientSocket) {
 }
 
 void PhotoBoothServer::handleStopMjpegEvent(int clientSocket) {
+    if (!identityRegistered()) { return; }
     if (mjpegServer->isActive()) {
         std::cout << "🛑 Stopping MJPEG stream (explicit)..." << std::endl;
         mjpegServer->stopStream();
@@ -220,6 +236,7 @@ void PhotoBoothServer::handleStopMjpegEvent(int clientSocket) {
 }
 
 void PhotoBoothServer::handleCapturePhotoEvent(int clientSocket) {
+    if (!identityRegistered()) { std::map<std::string, std::string> r; r["success"] = "false"; r["error"] = "identity_required"; if (socketIOServer) { socketIOServer->emitToClient(clientSocket, "photo-captured", r); } return; }
     std::cout << "📸 Capturing photo..." << std::endl;
     bool wasActive = mjpegServer->isActive();
     if (wasActive) {
