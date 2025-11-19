@@ -3,74 +3,202 @@
 #include <sstream>
 #include <ctime>
 #include <iostream>
+#include <cstdio>
 
-BoothIdentityStore::BoothIdentityStore() : initialized(false) {}
+BoothIdentityStore::BoothIdentityStore() : initialized(false), db(nullptr) {}
+
+BoothIdentityStore::~BoothIdentityStore() {
+    if (db != nullptr) {
+        sqlite3_close(db);
+        db = nullptr;
+    }
+}
+
+bool BoothIdentityStore::initializeDatabase() {
+    std::string sql = "CREATE TABLE IF NOT EXISTS booth_identities ("
+                      "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                      "booth_name TEXT NOT NULL,"
+                      "location TEXT NOT NULL,"
+                      "encrypted_data TEXT,"
+                      "created_at INTEGER NOT NULL"
+                      ");";
+    
+    return executeSQL(sql);
+}
+
+bool BoothIdentityStore::createTables() {
+    return initializeDatabase();
+}
+
+bool BoothIdentityStore::executeSQL(const std::string& sql) const {
+    char* errMsg = nullptr;
+    int rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg);
+    
+    if (rc != SQLITE_OK) {
+        std::cerr << "❌ SQL error: " << errMsg << std::endl;
+        std::cerr << "❌ SQL statement: " << sql << std::endl;
+        sqlite3_free(errMsg);
+        return false;
+    }
+    
+    return true;
+}
+
+bool BoothIdentityStore::executeSQL(const std::string& sql, std::vector<std::map<std::string, std::string>>& results) const {
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+    
+    if (rc != SQLITE_OK) {
+        std::cerr << "❌ Failed to prepare SQL: " << sqlite3_errmsg(db) << std::endl;
+        std::cerr << "❌ SQL statement: " << sql << std::endl;
+        return false;
+    }
+    
+    results.clear();
+    
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        std::map<std::string, std::string> row;
+        int columnCount = sqlite3_column_count(stmt);
+        
+        for (int i = 0; i < columnCount; i++) {
+            const char* columnName = sqlite3_column_name(stmt, i);
+            const char* columnValue = reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
+            
+            if (columnName && columnValue) {
+                row[columnName] = columnValue;
+            } else if (columnName) {
+                row[columnName] = "";
+            }
+        }
+        
+        results.push_back(row);
+    }
+    
+    sqlite3_finalize(stmt);
+    
+    if (rc != SQLITE_DONE) {
+        std::cerr << "❌ SQL execution error: " << sqlite3_errmsg(db) << std::endl;
+        return false;
+    }
+    
+    return true;
+}
 
 bool BoothIdentityStore::init(const std::string& dir) {
     std::lock_guard<std::mutex> lock(mu);
-    baseDir = dir;
-    jsonPath = baseDir + "/booth_identity.json";
-    initialized = true;
-    std::ifstream in(jsonPath);
-    if (!in.good()) {
-        std::ofstream out(jsonPath);
-        if (!out.good()) return false;
-        out << "[]";
+    
+    if (initialized) {
+        return true;
     }
+    
+    baseDir = dir;
+    dbPath = baseDir + "/booth_identity.db";
+    
+    int rc = sqlite3_open(dbPath.c_str(), &db);
+    if (rc != SQLITE_OK) {
+        std::cerr << "❌ Cannot open database: " << sqlite3_errmsg(db) << std::endl;
+        if (db) {
+            sqlite3_close(db);
+            db = nullptr;
+        }
+        return false;
+    }
+    
+    // Enable foreign keys
+    if (!executeSQL("PRAGMA foreign_keys = ON;")) {
+        std::cerr << "❌ Failed to enable foreign keys" << std::endl;
+        sqlite3_close(db);
+        db = nullptr;
+        return false;
+    }
+    
+    // Create tables
+    if (!createTables()) {
+        std::cerr << "❌ Failed to create database tables" << std::endl;
+        sqlite3_close(db);
+        db = nullptr;
+        return false;
+    }
+    
+    // Try to migrate from JSON if it exists
+    std::string jsonPath = baseDir + "/booth_identity.json";
+    std::ifstream jsonFile(jsonPath);
+    if (jsonFile.good()) {
+        std::cout << "🔄 Migrating data from JSON to SQLite..." << std::endl;
+        if (!migrateFromJSON(jsonPath)) {
+            std::cout << "⚠️  Warning: Migration from JSON failed, but continuing with SQLite" << std::endl;
+        } else {
+            std::cout << "✅ Successfully migrated data from JSON to SQLite" << std::endl;
+            // Backup the old JSON file
+            std::string backupPath = jsonPath + ".backup";
+            std::rename(jsonPath.c_str(), backupPath.c_str());
+            std::cout << "📦 Backed up old JSON file to: " << backupPath << std::endl;
+        }
+    }
+    
+    initialized = true;
+    std::cout << "✅ BoothIdentityStore initialized with SQLite database: " << dbPath << std::endl;
     return true;
 }
 
 bool BoothIdentityStore::hasIdentity() const {
     std::lock_guard<std::mutex> lock(mu);
-    std::ifstream in(jsonPath);
-    if (!in.good()) return false;
-    std::string content;
-    std::ostringstream ss;
-    ss << in.rdbuf();
-    content = ss.str();
-    for (char c : content) { if (c == '{') return true; }
+    
+    if (!initialized || !db) {
+        return false;
+    }
+    
+    std::string sql = "SELECT COUNT(*) as count FROM booth_identities LIMIT 1";
+    std::vector<std::map<std::string, std::string>> results;
+    
+    if (!executeSQL(sql, results)) {
+        return false;
+    }
+    
+    if (!results.empty()) {
+        std::string countStr = results[0]["count"];
+        return std::stoi(countStr) > 0;
+    }
+    
     return false;
 }
 
 std::map<std::string, std::string> BoothIdentityStore::getLatest() const {
     std::lock_guard<std::mutex> lock(mu);
+    
     std::map<std::string, std::string> out;
-    std::ifstream in(jsonPath);
-    if (!in.good()) return out;
-    std::string content;
-    std::ostringstream ss;
-    ss << in.rdbuf();
-    content = ss.str();
-    size_t lastObjStart = content.find_last_of('{');
-    if (lastObjStart == std::string::npos) return out;
-    size_t objEnd = content.find('}', lastObjStart);
-    if (objEnd == std::string::npos) return out;
-    std::string obj = content.substr(lastObjStart, objEnd - lastObjStart + 1);
-    size_t p = 0;
-    while (p < obj.size()) {
-        size_t ks = obj.find('"', p);
-        if (ks == std::string::npos) break;
-        size_t ke = obj.find('"', ks + 1);
-        if (ke == std::string::npos) break;
-        std::string k = obj.substr(ks + 1, ke - ks - 1);
-        size_t colon = obj.find(':', ke);
-        if (colon == std::string::npos) break;
-        size_t vs = colon + 1;
-        while (vs < obj.size() && (obj[vs] == ' ' || obj[vs] == '"')) vs++;
-        size_t ve = vs;
-        while (ve < obj.size() && obj[ve] != ',' && obj[ve] != '}') ve++;
-        std::string v = obj.substr(vs, ve - vs);
-        if (!v.empty() && v.front() == '"' && v.back() == '"') {
-            v = v.substr(1, v.size() - 2);
-        }
-        out[k] = v;
-        p = ve + 1;
+    
+    if (!initialized || !db) {
+        std::cerr << "❌ Database not initialized" << std::endl;
+        return out;
     }
+    
+    std::string sql = "SELECT booth_name, location, encrypted_data, created_at "
+                      "FROM booth_identities "
+                      "ORDER BY created_at DESC, id DESC "
+                      "LIMIT 1";
+    
+    std::vector<std::map<std::string, std::string>> results;
+    if (!executeSQL(sql, results)) {
+        std::cerr << "❌ Failed to query latest identity" << std::endl;
+        return out;
+    }
+    
+    if (!results.empty()) {
+        out = results[0];
+        std::cout << "🔍 Retrieved latest identity with " << out.size() << " fields" << std::endl;
+    }
+    
     return out;
 }
 
 bool BoothIdentityStore::save(const std::string& boothName, const std::string& location, const std::string& encryptedData) {
     std::lock_guard<std::mutex> lock(mu);
+    
+    if (!initialized || !db) {
+        std::cerr << "❌ Database not initialized" << std::endl;
+        return false;
+    }
     
     // Validate inputs
     if (boothName.empty() || location.empty()) {
@@ -109,64 +237,151 @@ bool BoothIdentityStore::save(const std::string& boothName, const std::string& l
         return false;
     }
     
-    std::ifstream in(jsonPath);
-    if (!in.good()) {
-        std::cerr << "❌ Cannot read identity file: " << jsonPath << std::endl;
-        return false;
-    }
-    
-    std::ostringstream ss;
-    ss << in.rdbuf();
-    std::string content = ss.str();
-    if (content.empty()) content = "[]";
-    
-    size_t insertPos = content.find_last_of(']');
-    if (insertPos == std::string::npos) {
-        std::cerr << "❌ Invalid JSON format in identity file" << std::endl;
-        return false;
-    }
-    
     std::time_t t = std::time(nullptr);
-    std::ostringstream obj;
-    obj << "{\"booth_name\":\"" << boothName << "\",";
-    obj << "\"location\":\"" << location << "\",";
-    obj << "\"encrypted_data\":\"" << encryptedData << "\",";
-    obj << "\"created_at\":" << t << "}";
     
-    std::string prefix = content.substr(0, insertPos);
-    std::string suffix = content.substr(insertPos);
-    if (prefix.size() >= 1 && prefix[prefix.size() - 1] != '[') prefix += ",";
-    std::string updated = prefix + obj.str() + suffix;
+    // Use prepared statement to prevent SQL injection
+    sqlite3_stmt* stmt;
+    std::string sql = "INSERT INTO booth_identities (booth_name, location, encrypted_data, created_at) "
+                      "VALUES (?, ?, ?, ?)";
     
-    std::string tmp = jsonPath + ".tmp";
-    {
-        std::ofstream out(tmp, std::ios::trunc);
-        if (!out.good()) {
-            std::cerr << "❌ Cannot create temp file: " << tmp << std::endl;
-            return false;
-        }
-        out << updated;
-        if (!out.good()) {
-            std::cerr << "❌ Failed to write to temp file: " << tmp << std::endl;
-            return false;
-        }
+    int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        std::cerr << "❌ Failed to prepare insert statement: " << sqlite3_errmsg(db) << std::endl;
+        return false;
     }
     
-    if (std::remove(jsonPath.c_str()) != 0) {
-        std::ifstream chk(jsonPath);
-        if (chk.good()) {
-            std::cerr << "❌ Cannot remove existing identity file" << std::endl;
-            std::remove(tmp.c_str()); // Clean up temp file
-            return false;
-        }
-    }
+    sqlite3_bind_text(stmt, 1, boothName.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, location.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, encryptedData.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int64(stmt, 4, t);
     
-    if (std::rename(tmp.c_str(), jsonPath.c_str()) != 0) {
-        std::cerr << "❌ Failed to rename temp file to identity file" << std::endl;
-        std::remove(tmp.c_str()); // Clean up temp file
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    if (rc != SQLITE_DONE) {
+        std::cerr << "❌ Failed to insert identity: " << sqlite3_errmsg(db) << std::endl;
         return false;
     }
     
     std::cout << "✅ Successfully saved identity: " << boothName << " at " << location << std::endl;
     return true;
+}
+
+bool BoothIdentityStore::migrateFromJSON(const std::string& jsonPath) {
+    std::ifstream in(jsonPath);
+    if (!in.good()) {
+        std::cout << "ℹ️  No JSON file found at: " << jsonPath << std::endl;
+        return true; // Not an error, just no file to migrate
+    }
+    
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    std::string content = ss.str();
+    
+    if (content.empty() || content == "[]") {
+        std::cout << "ℹ️  JSON file is empty, nothing to migrate" << std::endl;
+        return true;
+    }
+    
+    // Simple JSON parsing for migration
+    // Find all objects in the array
+    size_t pos = 0;
+    int migratedCount = 0;
+    
+    while ((pos = content.find('{', pos)) != std::string::npos) {
+        size_t objEnd = pos;
+        int braceCount = 0;
+        
+        for (size_t i = pos; i < content.size(); ++i) {
+            if (content[i] == '{') braceCount++;
+            else if (content[i] == '}') {
+                braceCount--;
+                if (braceCount == 0) {
+                    objEnd = i;
+                    break;
+                }
+            }
+        }
+        
+        if (braceCount != 0) break;
+        
+        std::string obj = content.substr(pos, objEnd - pos + 1);
+        
+        // Extract values from JSON object
+        std::string boothName, location, encryptedData;
+        std::time_t createdAt = 0;
+        
+        // Simple parsing for known fields
+        size_t found = obj.find("\"booth_name\"");
+        if (found != std::string::npos) {
+            size_t start = obj.find('"', found + 13);
+            size_t end = obj.find('"', start + 1);
+            if (start != std::string::npos && end != std::string::npos) {
+                boothName = obj.substr(start + 1, end - start - 1);
+            }
+        }
+        
+        found = obj.find("\"location\"");
+        if (found != std::string::npos) {
+            size_t start = obj.find('"', found + 11);
+            size_t end = obj.find('"', start + 1);
+            if (start != std::string::npos && end != std::string::npos) {
+                location = obj.substr(start + 1, end - start - 1);
+            }
+        }
+        
+        found = obj.find("\"encrypted_data\"");
+        if (found != std::string::npos) {
+            size_t start = obj.find('"', found + 17);
+            size_t end = obj.find('"', start + 1);
+            if (start != std::string::npos && end != std::string::npos) {
+                encryptedData = obj.substr(start + 1, end - start - 1);
+            }
+        }
+        
+        found = obj.find("\"created_at\"");
+        if (found != std::string::npos) {
+            size_t start = obj.find(':', found + 13);
+            size_t end = obj.find(',', start);
+            if (end == std::string::npos) end = obj.find('}', start);
+            if (start != std::string::npos && end != std::string::npos) {
+                std::string timeStr = obj.substr(start + 1, end - start - 1);
+                try {
+                    createdAt = std::stoll(timeStr);
+                } catch (...) {
+                    createdAt = std::time(nullptr);
+                }
+            }
+        }
+        
+        if (!boothName.empty() && !location.empty()) {
+            if (createdAt == 0) createdAt = std::time(nullptr);
+            
+            // Insert into SQLite
+            sqlite3_stmt* stmt;
+            std::string sql = "INSERT INTO booth_identities (booth_name, location, encrypted_data, created_at) "
+                              "VALUES (?, ?, ?, ?)";
+            
+            int rc = sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr);
+            if (rc == SQLITE_OK) {
+                sqlite3_bind_text(stmt, 1, boothName.c_str(), -1, SQLITE_STATIC);
+                sqlite3_bind_text(stmt, 2, location.c_str(), -1, SQLITE_STATIC);
+                sqlite3_bind_text(stmt, 3, encryptedData.c_str(), -1, SQLITE_STATIC);
+                sqlite3_bind_int64(stmt, 4, createdAt);
+                
+                rc = sqlite3_step(stmt);
+                sqlite3_finalize(stmt);
+                
+                if (rc == SQLITE_DONE) {
+                    migratedCount++;
+                    std::cout << "📥 Migrated identity: " << boothName << std::endl;
+                }
+            }
+        }
+        
+        pos = objEnd + 1;
+    }
+    
+    std::cout << "✅ Migration completed. Migrated " << migratedCount << " identities" << std::endl;
+    return migratedCount > 0 || content.empty() || content == "[]";
 }

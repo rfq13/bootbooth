@@ -7,7 +7,7 @@ PhotoBoothServer::PhotoBoothServer(int apiPort, int mjpegPort)
     createDirectories("previews");
     gphoto = new GPhotoWrapper("uploads", "previews");
     mjpegServer = new MJPEGServer(mjpegPort);
-    socketIOServer = new SocketIOServer(apiPort, this);
+    webSocketServer = new WebSocketServer(apiPort, this);
     identityStore = new BoothIdentityStore();
     createDirectories("data");
     identityStore->init("data");
@@ -17,7 +17,7 @@ PhotoBoothServer::~PhotoBoothServer() {
     stop();
     delete gphoto;
     delete mjpegServer;
-    delete socketIOServer;
+    delete webSocketServer;
     delete identityStore;
 }
 
@@ -29,8 +29,8 @@ bool PhotoBoothServer::start() {
         std::cerr << "Failed to start MJPEG server" << std::endl;
         return false;
     }
-    if (!socketIOServer->start()) {
-        std::cerr << "Failed to start Socket.IO server" << std::endl;
+    if (!webSocketServer->start()) {
+        std::cerr << "Failed to start WebSocket server" << std::endl;
         return false;
     }
     running = true;
@@ -42,7 +42,7 @@ bool PhotoBoothServer::stop() {
         return true;
     }
     mjpegServer->stop();
-    socketIOServer->stop();
+    webSocketServer->stop();
     running = false;
     return true;
 }
@@ -132,9 +132,9 @@ void PhotoBoothServer::handleImageRequest(int clientSocket, const std::string& f
     (void)clientSocket; (void)filename; (void)queryParams; // Suppress unused parameter warnings
 }
 
-void PhotoBoothServer::handleDetectCameraEvent(int clientSocket) {
+void PhotoBoothServer::handleDetectCameraEvent(connection_hdl hdl) {
     if (!identityRegistered()) {
-        std::map<std::string, std::string> resp; resp["success"] = "false"; resp["error"] = "identity_required"; if (socketIOServer) { socketIOServer->emitToClient(clientSocket, "camera-detected", resp); } return;
+        std::map<std::string, std::string> resp; resp["success"] = "false"; resp["error"] = "identity_required"; if (webSocketServer) { webSocketServer->emitToClient(hdl, "camera-detected", resp); } return;
     }
     std::cout << "📷 Detecting cameras..." << std::endl;
     std::vector<Camera> cameras = gphoto->detectCamera();
@@ -153,14 +153,14 @@ void PhotoBoothServer::handleDetectCameraEvent(int clientSocket) {
     } else {
         response["cameras"] = "[]";
     }
-    if (socketIOServer) {
-        socketIOServer->emitToClient(clientSocket, "camera-detected", response);
+    if (webSocketServer) {
+        webSocketServer->emitToClient(hdl, "camera-detected", response);
     }
     std::cout << "✅ Camera detection completed: " << cameras.size() << " cameras found" << std::endl;
 }
 
-void PhotoBoothServer::handleStartPreviewEvent(int clientSocket, const std::map<std::string, std::string>& data) {
-    if (!identityRegistered()) { std::map<std::string, std::string> r; r["success"] = "false"; r["error"] = "identity_required"; if (socketIOServer) { socketIOServer->emitToClient(clientSocket, "preview-started", r); } return; }
+void PhotoBoothServer::handleStartPreviewEvent(connection_hdl hdl, const std::map<std::string, std::string>& data) {
+    if (!identityRegistered()) { std::map<std::string, std::string> r; r["success"] = "false"; r["error"] = "identity_required"; if (webSocketServer) { webSocketServer->emitToClient(hdl, "preview-started", r); } return; }
     std::cout << "📹 Starting preview stream..." << std::endl;
     if (mjpegServer->isActive()) {
         std::cout << "⚠️ Stopping existing stream before starting new one..." << std::endl;
@@ -174,14 +174,14 @@ void PhotoBoothServer::handleStartPreviewEvent(int clientSocket, const std::map<
         response["success"] = "true";
         response["streamUrl"] = mjpegUrl;
         response["port"] = std::to_string(MJPEG_PORT);
-        if (socketIOServer) {
-            socketIOServer->emitToClient(clientSocket, "mjpeg-stream-started", response);
+        if (webSocketServer) {
+            webSocketServer->emitToClient(hdl, "mjpeg-stream-started", response);
         }
         std::map<std::string, std::string> previewResponse;
         previewResponse["success"] = "true";
         previewResponse["mjpeg"] = "true";
-        if (socketIOServer) {
-            socketIOServer->emitToClient(clientSocket, "preview-started", previewResponse);
+        if (webSocketServer) {
+            webSocketServer->emitToClient(hdl, "preview-started", previewResponse);
         }
         return;
     }
@@ -190,9 +190,9 @@ void PhotoBoothServer::handleStartPreviewEvent(int clientSocket, const std::map<
     if (fpsIt != data.end()) {
         try { fps = std::stoi(fpsIt->second); if (fps <= 0) fps = 4; } catch (...) { fps = 4; }
     }
-    auto result = gphoto->startPreviewStream([this, clientSocket](const std::string& event, const std::map<std::string, std::string>& payload) {
-        if (socketIOServer) {
-            socketIOServer->emitToClient(clientSocket, event, payload);
+    auto result = gphoto->startPreviewStream([this, hdl](const std::string& event, const std::map<std::string, std::string>& payload) {
+        if (webSocketServer) {
+            webSocketServer->emitToClient(hdl, event, payload);
         }
     }, fps);
     if (result["success"] == "true") {
@@ -200,48 +200,48 @@ void PhotoBoothServer::handleStartPreviewEvent(int clientSocket, const std::map<
         response["success"] = "true";
         response["mjpeg"] = "false";
         response["fps"] = std::to_string(fps);
-        if (socketIOServer) {
-            socketIOServer->emitToClient(clientSocket, "preview-started", response);
+        if (webSocketServer) {
+            webSocketServer->emitToClient(hdl, "preview-started", response);
         }
     } else {
         std::map<std::string, std::string> response;
         response["success"] = "false";
         response["mjpeg"] = "false";
         response["error"] = result["error"];
-        if (socketIOServer) {
-            socketIOServer->emitToClient(clientSocket, "preview-started", response);
+        if (webSocketServer) {
+            webSocketServer->emitToClient(hdl, "preview-started", response);
         }
     }
 }
 
-void PhotoBoothServer::handleStopPreviewEvent(int clientSocket) {
+void PhotoBoothServer::handleStopPreviewEvent(connection_hdl hdl) {
     if (!identityRegistered()) { return; }
     std::cout << "🛑 Stopping preview stream..." << std::endl;
     mjpegServer->stopStream();
     gphoto->stopPreviewStream();
     std::map<std::string, std::string> response;
     response["success"] = "true";
-    if (socketIOServer) {
-        socketIOServer->emitToClient(clientSocket, "mjpeg-stream-stopped", response);
+    if (webSocketServer) {
+        webSocketServer->emitToClient(hdl, "mjpeg-stream-stopped", response);
     }
     std::cout << "✅ Preview stream stopped" << std::endl;
 }
 
-void PhotoBoothServer::handleStopMjpegEvent(int clientSocket) {
+void PhotoBoothServer::handleStopMjpegEvent(connection_hdl hdl) {
     if (!identityRegistered()) { return; }
     if (mjpegServer->isActive()) {
         std::cout << "🛑 Stopping MJPEG stream (explicit)..." << std::endl;
         mjpegServer->stopStream();
         std::map<std::string, std::string> response;
         response["success"] = "true";
-        if (socketIOServer) {
-            socketIOServer->emitToClient(clientSocket, "mjpeg-stream-stopped", response);
+        if (webSocketServer) {
+            webSocketServer->emitToClient(hdl, "mjpeg-stream-stopped", response);
         }
     }
 }
 
-void PhotoBoothServer::handleCapturePhotoEvent(int clientSocket) {
-    if (!identityRegistered()) { std::map<std::string, std::string> r; r["success"] = "false"; r["error"] = "identity_required"; if (socketIOServer) { socketIOServer->emitToClient(clientSocket, "photo-captured", r); } return; }
+void PhotoBoothServer::handleCapturePhotoEvent(connection_hdl hdl) {
+    if (!identityRegistered()) { std::map<std::string, std::string> r; r["success"] = "false"; r["error"] = "identity_required"; if (webSocketServer) { webSocketServer->emitToClient(hdl, "photo-captured", r); } return; }
     std::cout << "📸 Capturing photo..." << std::endl;
     bool wasActive = mjpegServer->isActive();
     if (wasActive) {
@@ -249,8 +249,8 @@ void PhotoBoothServer::handleCapturePhotoEvent(int clientSocket) {
         mjpegServer->stopStream();
         std::map<std::string, std::string> stopResponse;
         stopResponse["success"] = "true";
-        if (socketIOServer) {
-            socketIOServer->emitToClient(clientSocket, "mjpeg-stream-stopped", stopResponse);
+        if (webSocketServer) {
+            webSocketServer->emitToClient(hdl, "mjpeg-stream-stopped", stopResponse);
         }
         std::cout << "⏳ Waiting for camera to be ready..." << std::endl;
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -261,22 +261,22 @@ void PhotoBoothServer::handleCapturePhotoEvent(int clientSocket) {
         std::map<std::string, std::string> response;
         response["success"] = "false";
         response["error"] = result["error"];
-        if (socketIOServer) {
-            socketIOServer->emitToClient(clientSocket, "photo-captured", response);
+        if (webSocketServer) {
+            webSocketServer->emitToClient(hdl, "photo-captured", response);
         }
         return;
     }
     std::cout << "✅ Photo captured successfully: " << result["filename"] << std::endl;
-    if (socketIOServer) {
-        socketIOServer->emitToClient(clientSocket, "photo-captured", result);
+    if (webSocketServer) {
+        webSocketServer->emitToClient(hdl, "photo-captured", result);
     }
     std::map<std::string, std::string> broadcastData;
     broadcastData["filename"] = result["filename"];
     broadcastData["path"] = result["url"];
     broadcastData["timestamp"] = result["timestamp"];
     broadcastData["simulated"] = "false";
-    if (socketIOServer) {
-        socketIOServer->broadcast("photoCaptured", broadcastData);
+    if (webSocketServer) {
+        webSocketServer->broadcast("photoCaptured", broadcastData);
     }
     if (wasActive) {
         std::cout << "⏳ Cooling down after capture..." << std::endl;
@@ -284,14 +284,14 @@ void PhotoBoothServer::handleCapturePhotoEvent(int clientSocket) {
     }
 }
 
-void PhotoBoothServer::handleSetEffectEvent(int clientSocket, const std::map<std::string, std::string>& data) {
+void PhotoBoothServer::handleSetEffectEvent(connection_hdl hdl, const std::map<std::string, std::string>& data) {
     auto effectIt = data.find("effect");
     if (effectIt == data.end()) {
         std::map<std::string, std::string> response;
         response["success"] = "false";
         response["error"] = "Invalid effect name";
-        if (socketIOServer) {
-            socketIOServer->emitToClient(clientSocket, "effect-changed", response);
+        if (webSocketServer) {
+            webSocketServer->emitToClient(hdl, "effect-changed", response);
         }
         return;
     }
@@ -343,15 +343,15 @@ void PhotoBoothServer::handleSetEffectEvent(int clientSocket, const std::map<std
     response["intensity"] = std::to_string(params.intensity);
     response["radius"] = std::to_string(params.radius);
     response["pixelSize"] = std::to_string(params.pixelSize);
-    if (socketIOServer) {
-        socketIOServer->emitToClient(clientSocket, "effect-changed", response);
+    if (webSocketServer) {
+        webSocketServer->emitToClient(hdl, "effect-changed", response);
     }
-    if (socketIOServer) {
-        socketIOServer->broadcast("effectChanged", response);
+    if (webSocketServer) {
+        webSocketServer->broadcast("effectChanged", response);
     }
 }
 
-void PhotoBoothServer::handleGetEffectEvent(int clientSocket) {
+void PhotoBoothServer::handleGetEffectEvent(connection_hdl hdl) {
     auto [effect, params] = mjpegServer->getCurrentEffect();
     std::string effectName;
     switch (effect) {
@@ -370,12 +370,12 @@ void PhotoBoothServer::handleGetEffectEvent(int clientSocket) {
     response["intensity"] = std::to_string(params.intensity);
     response["radius"] = std::to_string(params.radius);
     response["pixelSize"] = std::to_string(params.pixelSize);
-    if (socketIOServer) {
-        socketIOServer->emitToClient(clientSocket, "current-effect", response);
+    if (webSocketServer) {
+        webSocketServer->emitToClient(hdl, "current-effect", response);
     }
 }
 
-void PhotoBoothServer::handleApplyEffectEvent(int clientSocket, const std::map<std::string, std::string>& data) {
+void PhotoBoothServer::handleApplyEffectEvent(connection_hdl hdl, const std::map<std::string, std::string>& data) {
     std::cout << "🎨 Received apply-effect event from client" << std::endl;
     std::cout << "📋 Received data: ";
     for (const auto& pair : data) {
@@ -388,8 +388,8 @@ void PhotoBoothServer::handleApplyEffectEvent(int clientSocket, const std::map<s
         std::map<std::string, std::string> response;
         response["success"] = "false";
         response["error"] = "Invalid effect name";
-        if (socketIOServer) {
-            socketIOServer->emitToClient(clientSocket, "effect-applied", response);
+        if (webSocketServer) {
+            webSocketServer->emitToClient(hdl, "effect-applied", response);
         }
         return;
     }
@@ -485,11 +485,11 @@ void PhotoBoothServer::handleApplyEffectEvent(int clientSocket, const std::map<s
     response["intensity"] = std::to_string(params.intensity);
     response["radius"] = std::to_string(params.radius);
     response["pixelSize"] = std::to_string(params.pixelSize);
-    if (socketIOServer) {
-        socketIOServer->emitToClient(clientSocket, "effect-applied", response);
+    if (webSocketServer) {
+        webSocketServer->emitToClient(hdl, "effect-applied", response);
     }
-    if (socketIOServer) {
-        socketIOServer->broadcast("effectApplied", response);
+    if (webSocketServer) {
+        webSocketServer->broadcast("effectApplied", response);
     }
 }
 

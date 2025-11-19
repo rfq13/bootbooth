@@ -20,6 +20,10 @@
 #include <algorithm>
 #include <random>
 
+// Include WebSocket++ server library
+#include "../sioclient/lib/websocketpp/websocketpp/server.hpp"
+#include "../sioclient/lib/websocketpp/websocketpp/config/asio_no_tls.hpp"
+
 // Kompabilitas Windows
 #ifdef _WIN32
     #define WIN32_LEAN_AND_MEAN
@@ -57,6 +61,11 @@
     #define SIGINT 2
     #define SIGTERM 15
     
+    // TCP compatibility untuk Windows
+    #ifndef TCP_NODELAY
+        #define TCP_NODELAY 0x0001
+    #endif
+    
     // OpenSSL compatibility untuk Windows
     #define SHA_DIGEST_LENGTH 20
     
@@ -64,6 +73,7 @@
     // Linux/Unix
     #include <sys/socket.h>
     #include <netinet/in.h>
+    #include <netinet/tcp.h>
     #include <arpa/inet.h>
     #include <unistd.h>
     #include <fcntl.h>
@@ -172,7 +182,7 @@ class ImageEffects;
 // Forward declaration of PhotoBoothServer
 class PhotoBoothServer;
 
-class SocketIOServer;
+class WebSocketServer;
 
 class BoothIdentityStore;
 
@@ -282,57 +292,54 @@ private:
     void processFrameBuffer(std::vector<unsigned char>& buffer);
 };
 
-// Kelas Socket.IO Server
-class SocketIOServer {
+// WebSocket++ server type definition
+typedef websocketpp::server<websocketpp::config::asio> websocket_server;
+typedef websocketpp::connection_hdl connection_hdl;
+
+// Kelas WebSocket Server (menggunakan websocketpp sebagai server)
+class WebSocketServer {
 private:
     int port;
-    int serverSocket;
     bool running;
-    std::vector<int> clientSockets;
-    mutable std::mutex clientsMutex;
+    std::unique_ptr<websocket_server> wsServer;
     PhotoBoothServer* photoBoothServer;
-    std::string lastSid;
+    std::map<connection_hdl, std::string, std::owner_less<connection_hdl>> clients;
+    mutable std::mutex clientsMutex;
+    std::thread serverThread;
     
 public:
-    SocketIOServer(int port, PhotoBoothServer* photoBoothServer);
-    ~SocketIOServer();
+    WebSocketServer(int port, PhotoBoothServer* photoBoothServer);
+    ~WebSocketServer();
     
     bool start();
     bool stop();
     bool isRunning() const;
     
     // Event emitters
-    void emitToClient(int clientSocket, const std::string& event, const std::map<std::string, std::string>& data);
+    void emitToClient(connection_hdl hdl, const std::string& event, const std::map<std::string, std::string>& data);
     void broadcast(const std::string& event, const std::map<std::string, std::string>& data);
     void emitToAll(const std::string& event, const std::map<std::string, std::string>& data);
     
 private:
-    void setupRoutes();
-    void handleClient(int clientSocket);
-    void handleWebSocketHandshake(int clientSocket, const std::string& request);
-    void handleSocketIOMessages(int clientSocket);
-    void handleSocketIOEvent(int clientSocket, const std::string& event, const std::map<std::string, std::string>& data);
-    void sendSocketIOPacket(int clientSocket, const std::string& event, const std::map<std::string, std::string>& data);
-    void closeAllClients();
-    void removeClient(int clientSocket);
-    std::string generateSocketIOPacket(const std::string& event, const std::map<std::string, std::string>& data);
-    // WebSocket helpers
-    std::string computeWebSocketAccept(const std::string& clientKey);
-    void sendTextFrame(int clientSocket, const std::string& payload);
-    bool recvExact(int clientSocket, char* buf, size_t len);
-    bool recvTextFrame(int clientSocket, std::string& outPayload);
-    std::string base64EncodeBytes(const unsigned char* data, size_t len);
-    std::string generateSID();
+    void setupEventHandlers();
+    void onOpen(connection_hdl hdl);
+    void onClose(connection_hdl hdl);
+    void onMessage(connection_hdl hdl, websocket_server::message_ptr msg);
+    std::string mapToJsonObject(const std::map<std::string, std::string>& data);
     
-    // HTTP request handling
-    void handleHttpRequest(int clientSocket, const std::string& request);
-    void handleApiStatusRequest(int clientSocket);
-    void handleApiPhotosRequest(int clientSocket);
-    void handleApiPreviewRequest(int clientSocket);
-    void handleApiPhotoDeleteRequest(int clientSocket, const std::string& filename);
-    void handleImageRequest(int clientSocket, const std::string& filename, const std::map<std::string, std::string>& queryParams);
-    std::string generateHttpResponse(const std::string& content, const std::string& contentType = "text/plain");
+    // WebSocket message handling
+    void handleWebSocketMessage(connection_hdl hdl, const std::string& message);
+    void handleEvent(connection_hdl hdl, const std::string& event, const std::map<std::string, std::string>& data);
+    
+    // HTTP request handling (untuk API endpoints)
+    void handleApiRequest(const std::string& method, const std::string& path, const std::map<std::string, std::string>& data);
+    void handleApiStatusRequest(connection_hdl hdl);
+    void handleApiPhotosRequest(connection_hdl hdl);
+    void handleApiPreviewRequest(connection_hdl hdl);
+    void handleApiPhotoDeleteRequest(connection_hdl hdl, const std::string& filename);
+    void handleImageRequest(connection_hdl hdl, const std::string& filename, const std::map<std::string, std::string>& queryParams);
     std::string generateJsonResponse(const std::map<std::string, std::string>& data);
+    std::string generateJsonResponseWithBoolean(const std::map<std::string, std::string>& data);
     std::map<std::string, std::string> parseQueryString(const std::string& query);
 };
 
@@ -343,7 +350,7 @@ private:
     int mjpegPort;
     GPhotoWrapper* gphoto;
     MJPEGServer* mjpegServer;
-    SocketIOServer* socketIOServer;
+    WebSocketServer* webSocketServer;
     bool running;
     BoothIdentityStore* identityStore;
     
@@ -358,7 +365,7 @@ public:
     
     // Getter methods
     GPhotoWrapper* getGPhotoWrapper() { return gphoto; }
-    SocketIOServer* getSocketIOServer() { return socketIOServer; }
+    WebSocketServer* getWebSocketServer() { return webSocketServer; }
     BoothIdentityStore* getIdentityStore() { return identityStore; }
     std::vector<Photo> getPhotosList();
     bool deletePhoto(const std::string& filename);
@@ -366,15 +373,15 @@ public:
     // File access methods
     std::vector<unsigned char> readImageFile(const std::string& filePath);
     
-    // WebSocket Event Handlers (made public for SocketIOServer access)
-    void handleDetectCameraEvent(int clientSocket);
-    void handleStartPreviewEvent(int clientSocket, const std::map<std::string, std::string>& data);
-    void handleStopPreviewEvent(int clientSocket);
-    void handleStopMjpegEvent(int clientSocket);
-    void handleCapturePhotoEvent(int clientSocket);
-    void handleSetEffectEvent(int clientSocket, const std::map<std::string, std::string>& data);
-    void handleGetEffectEvent(int clientSocket);
-    void handleApplyEffectEvent(int clientSocket, const std::map<std::string, std::string>& data);
+    // WebSocket Event Handlers (made public for WebSocketServer access)
+    void handleDetectCameraEvent(connection_hdl hdl);
+    void handleStartPreviewEvent(connection_hdl hdl, const std::map<std::string, std::string>& data);
+    void handleStopPreviewEvent(connection_hdl hdl);
+    void handleStopMjpegEvent(connection_hdl hdl);
+    void handleCapturePhotoEvent(connection_hdl hdl);
+    void handleSetEffectEvent(connection_hdl hdl, const std::map<std::string, std::string>& data);
+    void handleGetEffectEvent(connection_hdl hdl);
+    void handleApplyEffectEvent(connection_hdl hdl, const std::map<std::string, std::string>& data);
     
 private:
     void setupRoutes();

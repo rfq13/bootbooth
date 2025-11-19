@@ -1,5 +1,4 @@
 import { useEffect, useState } from "preact/hooks";
-import io from "socket.io-client";
 import BoothRegistration from "./components/BoothRegistration.jsx";
 import CameraView from "./components/CameraView.jsx";
 import PhotoGallery from "./components/PhotoGallery.jsx";
@@ -7,25 +6,102 @@ import Controls from "./components/Controls.jsx";
 import LayoutPage from "./components/LayoutPage.jsx";
 import { useNotify } from "./components/Notify.jsx";
 import { appState } from "./main.jsx";
-import { SOCKET_URL, API_URL, BACKOFFICE_SOCKET_URL } from "./constants";
+import { WS_URL, API_URL, BACKOFFICE_SOCKET_URL } from "./constants";
 
-const socket = io(SOCKET_URL, {
-  transports: ["websocket", "polling"],
-  path: "/socket.io/",
-  reconnection: true,
-  reconnectionAttempts: 5,
-  reconnectionDelay: 1000,
-  timeout: 5000,
+// DEBUG: WebSocket connection configuration
+console.log("🔍 DEBUG: Attempting to connect WebSocket to:", WS_URL);
+console.log("🔍 DEBUG: WebSocket config:", {
+  reconnect: true,
+  reconnectAttempts: 5,
+  reconnectDelay: 1000,
 });
 
-const boSocket = io(BACKOFFICE_SOCKET_URL, {
-  transports: ["polling"],
-  path: "/socket.io/",
-  reconnection: true,
-  reconnectionAttempts: 5,
-  reconnectionDelay: 1000,
-  timeout: 5000,
-});
+let websocket = null;
+let boSocket = null;
+
+// WebSocket connection functions
+function connectWebSocket(url) {
+  try {
+    websocket = new WebSocket(url);
+
+    websocket.onopen = () => {
+      console.log("✅ DEBUG: WebSocket connected successfully!");
+      console.log("🔍 DEBUG: WebSocket URL:", url);
+      if (window.onWebSocketConnected) {
+        window.onWebSocketConnected();
+      }
+    };
+
+    websocket.onclose = (event) => {
+      console.log(
+        "❌ DEBUG: WebSocket disconnected. Code:",
+        event.code,
+        "Reason:",
+        event.reason
+      );
+      if (window.onWebSocketDisconnected) {
+        window.onWebSocketDisconnected();
+      }
+    };
+
+    websocket.onerror = (error) => {
+      console.log("❌ DEBUG: WebSocket connection error:", error);
+      if (window.onWebSocketError) {
+        window.onWebSocketError(error);
+      }
+    };
+
+    websocket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("📨 Received WebSocket message:", data);
+
+        if (data.event && window.onWebSocketEvent) {
+          window.onWebSocketEvent(data.event, data.data);
+        }
+      } catch (error) {
+        console.error("Error parsing WebSocket message:", error);
+      }
+    };
+
+    return websocket;
+  } catch (error) {
+    console.error("Error creating WebSocket connection:", error);
+    return null;
+  }
+}
+
+function sendWebSocketEvent(event, data = {}) {
+  if (websocket && websocket.readyState === WebSocket.OPEN) {
+    const message = JSON.stringify({
+      event: event,
+      data: data,
+    });
+    websocket.send(message);
+    console.log("📤 Sent WebSocket event:", event, data);
+  } else {
+    console.warn("WebSocket not connected, cannot send event:", event);
+  }
+}
+
+// Backoffice Socket.IO connection (unchanged)
+console.log(
+  "🔍 DEBUG: Attempting to connect backoffice Socket.IO to:",
+  BACKOFFICE_SOCKET_URL
+);
+
+try {
+  boSocket = io(BACKOFFICE_SOCKET_URL, {
+    transports: ["polling"],
+    path: "/socket.io/",
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+    timeout: 5000,
+  });
+} catch (error) {
+  console.error("Error creating backoffice Socket.IO connection:", error);
+}
 
 export default function App() {
   const notify = useNotify();
@@ -100,115 +176,160 @@ export default function App() {
 
   useEffect(() => {
     if (!identityReady) return;
+
     checkCameraStatus();
     loadPhotos(setPhotos);
 
-    socket.on("connect", () => {
+    // WebSocket event handlers
+    window.onWebSocketConnected = () => {
+      console.log("✅ DEBUG: WebSocket connected successfully!");
       setSocketConnected(true);
       checkCameraStatus();
-    });
-    socket.on("disconnect", (reason) => {
-      setSocketConnected(false);
-    });
-    socket.on("connect_error", () => {
-      setSocketConnected(false);
-    });
-    socket.on("reconnect", () => {
-      setSocketConnected(true);
-      checkCameraStatus();
-    });
+    };
 
-    boSocket.on("connect", () => {
-      if (identity && identity.booth_name) {
-        const name = identity.booth_name;
-        const loc = identity.location || {};
-        const location =
-          typeof loc === "string" ? loc : `${loc.lat || 0},${loc.lng || 0}`;
-        const outletId = "out-1";
-        boSocket.emit("register", { name, location, outlet_id: outletId });
-      }
-    });
-    boSocket.on("disconnect", () => {});
+    window.onWebSocketDisconnected = () => {
+      console.log("❌ DEBUG: WebSocket disconnected");
+      setSocketConnected(false);
+    };
 
-    socket.on("previewFrame", (data) => {
-      if (data.image) setPreviewImage(data.image);
-    });
-    socket.on("photoCaptured", (data) => {
-      loadPhotos(setPhotos);
-      appState.value = {
-        ...appState.value,
-        photos: [data, ...appState.value.photos],
-        currentPhoto: data,
-        isCapturing: false,
-        flash: true,
-      };
-      setTimeout(() => {
-        appState.value = { ...appState.value, flash: false };
-      }, 300);
-    });
-    socket.on("photoDeleted", (data) => {
-      loadPhotos(setPhotos);
-      appState.value = {
-        ...appState.value,
-        photos: appState.value.photos.filter(
-          (photo) => photo.Filename !== data.filename
-        ),
-      };
-      if (
-        appState.value.currentPhoto &&
-        appState.value.currentPhoto.Filename === data.filename
-      ) {
-        appState.value = { ...appState.value, currentPhoto: null };
+    window.onWebSocketError = (error) => {
+      console.log("❌ DEBUG: WebSocket connection error:", error);
+      setSocketConnected(false);
+    };
+
+    window.onWebSocketEvent = (eventName, data) => {
+      console.log("📨 Received WebSocket event:", eventName, data);
+
+      switch (eventName) {
+        case "connected":
+          // Connection confirmation
+          break;
+        case "previewFrame":
+          if (data.image) setPreviewImage(data.image);
+          break;
+        case "photoCaptured":
+          loadPhotos(setPhotos);
+          appState.value = {
+            ...appState.value,
+            photos: [data, ...appState.value.photos],
+            currentPhoto: data,
+            isCapturing: false,
+            flash: true,
+          };
+          setTimeout(() => {
+            appState.value = { ...appState.value, flash: false };
+          }, 300);
+          break;
+        case "photoDeleted":
+          loadPhotos(setPhotos);
+          appState.value = {
+            ...appState.value,
+            photos: appState.value.photos.filter(
+              (photo) => photo.Filename !== data.filename
+            ),
+          };
+          if (
+            appState.value.currentPhoto &&
+            appState.value.currentPhoto.Filename === data.filename
+          ) {
+            appState.value = { ...appState.value, currentPhoto: null };
+          }
+          break;
+        case "preview-started":
+          if (data.success) {
+            setIsPreviewActive(true);
+            setMjpegBust(Date.now());
+            appState.value = { ...appState.value, currentPhoto: null };
+          }
+          break;
+        case "preview-stopped":
+          setIsPreviewActive(false);
+          setPreviewImage(null);
+          setMjpegStreamUrl(null);
+          break;
+        case "mjpeg-stream-started":
+          if (data.success) {
+            setMjpegStreamUrl(data.streamUrl);
+            setMjpegBust(Date.now());
+            setIsPreviewActive(true);
+            appState.value = { ...appState.value, currentPhoto: null };
+          }
+          break;
+        case "mjpeg-stream-stopped":
+          setMjpegStreamUrl(null);
+          setMjpegBust(0);
+          setIsPreviewActive(false);
+          setPreviewImage(null);
+          break;
+        case "camera-detected":
+          if (data.success !== undefined) {
+            setCameraConnected(data.success);
+            appState.value = {
+              ...appState.value,
+              cameraConnected: data.success,
+            };
+          }
+          break;
+        case "api-response":
+          // Handle API responses if needed
+          break;
+        default:
+          console.log("⚠️ Unknown WebSocket event:", eventName);
       }
-    });
-    socket.on("preview-started", (data) => {
-      if (data.success) {
-        setIsPreviewActive(true);
-        setMjpegBust(Date.now());
-        appState.value = { ...appState.value, currentPhoto: null };
-      }
-    });
-    socket.on("preview-stopped", () => {
-      setIsPreviewActive(false);
-      setPreviewImage(null);
-      setMjpegStreamUrl(null);
-    });
-    socket.on("mjpeg-stream-started", (data) => {
-      if (data.success) {
-        setMjpegStreamUrl(data.streamUrl);
-        setMjpegBust(Date.now());
-        setIsPreviewActive(true);
-        appState.value = { ...appState.value, currentPhoto: null };
-      }
-    });
-    socket.on("mjpeg-stream-stopped", () => {
-      setMjpegStreamUrl(null);
-      setMjpegBust(0);
-      setIsPreviewActive(false);
-      setPreviewImage(null);
-    });
-    socket.on("camera-detected", (data) => {
-      if (data.success !== undefined) {
-        setCameraConnected(data.success);
-        appState.value = { ...appState.value, cameraConnected: data.success };
-      }
-    });
+    };
+
+    // Connect WebSocket
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+      websocket = connectWebSocket(WS_URL);
+    }
+
+    // Backoffice Socket.IO connection (unchanged)
+    if (boSocket) {
+      boSocket.on("connect", () => {
+        console.log("✅ DEBUG: Backoffice Socket.IO connected successfully!");
+        console.log("🔍 DEBUG: Backoffice Socket ID:", boSocket.id);
+        if (identity && identity.booth_name) {
+          const name = identity.booth_name;
+          const loc = identity.location || {};
+          const location =
+            typeof loc === "string" ? loc : `${loc.lat || 0},${loc.lng || 0}`;
+          const outletId = "out-1";
+          console.log("🔍 DEBUG: Emitting backoffice registration:", {
+            name,
+            location,
+            outlet_id: outletId,
+          });
+          boSocket.emit("register", { name, location, outlet_id: outletId });
+        }
+      });
+      boSocket.on("disconnect", (reason) => {
+        console.log(
+          "❌ DEBUG: Backoffice Socket.IO disconnected. Reason:",
+          reason
+        );
+      });
+      boSocket.on("connect_error", (error) => {
+        console.log("❌ DEBUG: Backoffice Socket.IO connection error:", error);
+      });
+    }
 
     return () => {
-      socket.off("connect");
-      socket.off("disconnect");
-      socket.off("connect_error");
-      socket.off("reconnect");
-      socket.off("previewFrame");
-      socket.off("photoCaptured");
-      socket.off("photoDeleted");
-      socket.off("preview-started");
-      socket.off("preview-stopped");
-      socket.off("mjpeg-stream-started");
-      socket.off("mjpeg-stream-stopped");
-      socket.off("camera-detected");
-      boSocket.off("connect");
-      boSocket.off("disconnect");
+      // Cleanup WebSocket event handlers
+      window.onWebSocketConnected = null;
+      window.onWebSocketDisconnected = null;
+      window.onWebSocketError = null;
+      window.onWebSocketEvent = null;
+
+      // Close WebSocket connection
+      if (websocket) {
+        websocket.close();
+        websocket = null;
+      }
+
+      if (boSocket) {
+        boSocket.off("connect");
+        boSocket.off("disconnect");
+      }
     };
   }, [identityReady, identity]);
 
@@ -225,8 +346,8 @@ export default function App() {
     setIsStartingPreview(true);
 
     // Stop any existing preview first
-    socket.emit("stop-preview");
-    socket.emit("stop-mjpeg");
+    sendWebSocketEvent("stop-preview");
+    sendWebSocketEvent("stop-mjpeg");
 
     // Clear preview state
     setPreviewImage(null);
@@ -235,7 +356,7 @@ export default function App() {
 
     // Wait a bit then start preview with effect
     setTimeout(() => {
-      socket.emit("start-preview", {
+      sendWebSocketEvent("start-preview", {
         effect: currentEffect,
         params: effectParams,
       });
@@ -251,7 +372,7 @@ export default function App() {
       isPreviewActive,
     });
     if (isPreviewActive) {
-      socket.emit("apply-effect", {
+      sendWebSocketEvent("apply-effect", {
         effect: currentEffect,
         params: effectParams,
       });
@@ -270,7 +391,7 @@ export default function App() {
           clearInterval(countdownInterval);
 
           // Capture photo after countdown
-          socket.emit("capture-photo", {
+          sendWebSocketEvent("capture-photo", {
             effect: currentEffect,
             params: effectParams,
           });
@@ -294,7 +415,7 @@ export default function App() {
     // If preview is active, also send the updated params to the server
     console.log("APPLYING EFFECT...", { newParams, isPreviewActive });
     if (isPreviewActive) {
-      socket.emit("apply-effect", {
+      sendWebSocketEvent("apply-effect", {
         effect: currentEffect,
         params: newParams,
       });
@@ -302,8 +423,8 @@ export default function App() {
   };
 
   const handleStopPreview = () => {
-    socket.emit("stop-preview");
-    socket.emit("stop-mjpeg");
+    sendWebSocketEvent("stop-preview");
+    sendWebSocketEvent("stop-mjpeg");
     setIsPreviewActive(false);
     setPreviewImage(null);
     setMjpegStreamUrl(null);

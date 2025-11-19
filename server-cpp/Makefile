@@ -2,8 +2,15 @@
 
 # Compiler and flags
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -O2
-LDFLAGS = -lpthread -ljpeg -lssl -lcrypto
+CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -DBOOST_DATE_TIME_NO_LIB -DBOOST_REGEX_NO_LIB -DASIO_STANDALONE -D_WEBSOCKETPP_CPP11_STL_ -D_WEBSOCKETPP_CPP11_FUNCTIONAL_
+LDFLAGS = -lpthread -ljpeg -lssl -lcrypto -lsqlite3
+
+# WebSocket++ and Asio paths
+SIO_CLIENT_DIR = sioclient
+SIO_INCLUDES = -I$(SIO_CLIENT_DIR)/src -I$(SIO_CLIENT_DIR)/lib/asio/asio/include -I$(SIO_CLIENT_DIR)/lib/websocketpp -I$(SIO_CLIENT_DIR)/lib/websocketpp/websocketpp -I$(SIO_CLIENT_DIR)/lib/rapidjson/include
+
+# Boost include path (system boost installation)
+BOOST_INCLUDES = -I/usr/include/boost
 
 # Directories
 SRC_DIR = src
@@ -17,9 +24,12 @@ SOURCES = $(SRC_DIR)/main.cpp \
           $(SRC_DIR)/image_effects.cpp \
           $(SRC_DIR)/gphoto_wrapper.cpp \
           $(SRC_DIR)/mjpeg_server.cpp \
-          $(SRC_DIR)/socket_io_server.cpp \
+          $(SRC_DIR)/web_socket_server.cpp \
           $(SRC_DIR)/photobooth_server.cpp \
           $(SRC_DIR)/booth_identity.cpp
+
+# All sources
+ALL_SOURCES = $(SOURCES)
 
 # Object files
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
@@ -43,7 +53,7 @@ $(TARGET): $(OBJECTS) | $(BIN_DIR)
 
 # Compile source files
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
-	$(CXX) $(CXXFLAGS) -I$(INC_DIR) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -I$(INC_DIR) $(SIO_INCLUDES) $(BOOST_INCLUDES) -c $< -o $@
 
 # Clean build artifacts
 clean:
@@ -53,10 +63,20 @@ clean:
 run: $(TARGET)
 	$(TARGET)
 
+# Run the server with standalone mode (recommended)
+run-standalone: $(TARGET)
+	$(TARGET)
+
+# Quick start script
+start: $(TARGET)
+	@echo "🚀 Starting Photo Booth Server (Standalone Mode)..."
+	@mkdir -p uploads previews data
+	./bin/photobooth-server
+
 # Install dependencies (Ubuntu/Debian)
 install-deps:
 	sudo apt-get update
-	sudo apt-get install -y g++ libjpeg-dev libssl-dev gphoto2 libboost-all-dev git cmake build-essential
+	sudo apt-get install -y g++ libjpeg-dev libssl-dev gphoto2 libboost-all-dev git cmake build-essential libsqlite3-dev
 
 # Install dependencies (CentOS/RHEL)
 install-deps-centos:
@@ -96,6 +116,8 @@ help:
 	@echo "  all         - Build the server (default)"
 	@echo "  clean       - Remove build artifacts"
 	@echo "  run         - Build and run the server"
+	@echo "  run-standalone - Build and run in standalone mode (recommended)"
+	@echo "  start       - Quick start with directory setup"
 	@echo "  debug       - Build with debug symbols"
 	@echo "  release    - Build with optimization"
 	@echo "  install-deps - Install dependencies (Ubuntu/Debian)"
@@ -106,5 +128,9 @@ help:
 	@echo "  docs        - Generate documentation"
 	@echo "  test        - Run tests (not implemented)"
 	@echo "  help        - Show this help"
+	@echo ""
+	@echo "Recommended usage:"
+	@echo "  make start     - Quick start with setup"
+	@echo "  ./start-server.sh - Full startup script"
 
-.PHONY: all clean run debug release install-deps install-deps-centos install-deps-macos cppcheck format docs test help
+.PHONY: all clean run run-standalone start debug release install-deps install-deps-centos install-deps-macos cppcheck format docs test help
