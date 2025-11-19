@@ -18,7 +18,8 @@ SOURCES = $(SRC_DIR)/main.cpp \
           $(SRC_DIR)/gphoto_wrapper.cpp \
           $(SRC_DIR)/mjpeg_server.cpp \
           $(SRC_DIR)/socket_io_server.cpp \
-          $(SRC_DIR)/photobooth_server.cpp
+          $(SRC_DIR)/photobooth_server.cpp \
+          $(SRC_DIR)/booth_identity.cpp
 
 # Object files
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)

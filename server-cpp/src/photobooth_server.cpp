@@ -59,24 +59,22 @@ bool PhotoBoothServer::identityRegistered() const {
 std::vector<Photo> PhotoBoothServer::getPhotosList() {
     std::vector<Photo> photos;
     try {
-        for (const auto& entry : std::filesystem::directory_iterator("uploads")) {
-            if (entry.is_regular_file()) {
-                std::string filename = entry.path().filename().string();
-                if (filename.size() > 4 &&
-                    (filename.substr(filename.size() - 4) == ".jpg" ||
-                     filename.substr(filename.size() - 5) == ".jpeg")) {
-                    Photo photo;
-                    photo.filename = filename;
-                    photo.path = "/uploads/" + filename;
-                    if (filename.find("photo_") == 0) {
-                        std::string timestampStr = filename.substr(6, filename.size() - 10);
-                        try { photo.timestamp = std::stoll(timestampStr); } catch (...) { photo.timestamp = std::time(nullptr); }
-                    } else {
-                        photo.timestamp = std::time(nullptr);
-                    }
-                    photo.simulated = false;
-                    photos.push_back(photo);
+        auto entries = filesystem_compat::directory_entries("uploads");
+        for (const auto& filename : entries) {
+            if (filename.size() > 4 &&
+                (filename.substr(filename.size() - 4) == ".jpg" ||
+                 filename.substr(filename.size() - 5) == ".jpeg")) {
+                Photo photo;
+                photo.filename = filename;
+                photo.path = "/uploads/" + filename;
+                if (filename.find("photo_") == 0) {
+                    std::string timestampStr = filename.substr(6, filename.size() - 10);
+                    try { photo.timestamp = std::stoll(timestampStr); } catch (...) { photo.timestamp = std::time(nullptr); }
+                } else {
+                    photo.timestamp = std::time(nullptr);
                 }
+                photo.simulated = false;
+                photos.push_back(photo);
             }
         }
     } catch (const std::exception& e) {
@@ -91,14 +89,14 @@ std::vector<unsigned char> PhotoBoothServer::readImageFile(const std::string& fi
 }
 
 bool PhotoBoothServer::deletePhoto(const std::string& filename) {
-    if (filename.find("..") != std::string::npos || 
-        filename.find("/") != std::string::npos || 
+    if (filename.find("..") != std::string::npos ||
+        filename.find("/") != std::string::npos ||
         filename.find("\\") != std::string::npos) {
         return false;
     }
     std::string filePath = "uploads/" + filename;
     try {
-        return std::filesystem::remove(filePath);
+        return filesystem_compat::remove(filePath);
     } catch (const std::exception& e) {
         std::cerr << "Error deleting photo: " << e.what() << std::endl;
         return false;
@@ -106,25 +104,32 @@ bool PhotoBoothServer::deletePhoto(const std::string& filename) {
 }
 
 void PhotoBoothServer::handleHttpRequest(int clientSocket, const std::string& request) {
+    (void)clientSocket; (void)request; // Suppress unused parameter warnings
 }
 
 void PhotoBoothServer::handleWebSocketConnection(int clientSocket) {
+    (void)clientSocket; // Suppress unused parameter warning
 }
 
 void PhotoBoothServer::handleStatusRequest(int clientSocket) {
+    (void)clientSocket; // Suppress unused parameter warning
 }
 
 void PhotoBoothServer::handlePhotosRequest(int clientSocket) {
+    (void)clientSocket; // Suppress unused parameter warning
 }
 
 void PhotoBoothServer::handlePreviewRequest(int clientSocket) {
+    (void)clientSocket; // Suppress unused parameter warning
 }
 
 void PhotoBoothServer::handlePhotoDeleteRequest(int clientSocket, const std::string& filename) {
+    (void)clientSocket; (void)filename; // Suppress unused parameter warnings
 }
 
 void PhotoBoothServer::handleImageRequest(int clientSocket, const std::string& filename,
                                          const std::map<std::string, std::string>& queryParams) {
+    (void)clientSocket; (void)filename; (void)queryParams; // Suppress unused parameter warnings
 }
 
 void PhotoBoothServer::handleDetectCameraEvent(int clientSocket) {

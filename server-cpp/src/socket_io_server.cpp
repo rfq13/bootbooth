@@ -1,4 +1,7 @@
 #include "../include/server.h"
+#include "../include/booth_identity.h"
+#include <cerrno>
+#include <cstring>
 
 SocketIOServer::SocketIOServer(int port, PhotoBoothServer* photoBoothServer)
     : port(port), serverSocket(-1), running(false), photoBoothServer(photoBoothServer) {
@@ -66,13 +69,22 @@ bool SocketIOServer::isRunning() const {
 }
 
 void SocketIOServer::emitToClient(int clientSocket, const std::string& event, const std::map<std::string, std::string>& data) {
-    sendSocketIOPacket(clientSocket, event, data);
+    // Check if client is still connected before sending
+    std::lock_guard<std::mutex> lock(clientsMutex);
+    if (std::find(clientSockets.begin(), clientSockets.end(), clientSocket) != clientSockets.end()) {
+        sendSocketIOPacket(clientSocket, event, data);
+    }
 }
 
 void SocketIOServer::broadcast(const std::string& event, const std::map<std::string, std::string>& data) {
     std::lock_guard<std::mutex> lock(clientsMutex);
-    for (int clientSocket : clientSockets) {
-        sendSocketIOPacket(clientSocket, event, data);
+    // Create a copy of client sockets to avoid issues with socket removal during iteration
+    std::vector<int> clientsCopy = clientSockets;
+    for (int clientSocket : clientsCopy) {
+        // Double-check client is still in the list before sending
+        if (std::find(clientSockets.begin(), clientSockets.end(), clientSocket) != clientSockets.end()) {
+            sendSocketIOPacket(clientSocket, event, data);
+        }
     }
 }
 
@@ -105,8 +117,11 @@ void SocketIOServer::handleClient(int clientSocket) {
     char buffer[4096];
     std::string request;
     while (true) {
-        ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+        ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer) - 1, MSG_NOSIGNAL);
         if (bytesRead <= 0) {
+            if (errno == EPIPE || errno == ECONNRESET) {
+                removeClient(clientSocket);
+            }
             break;
         }
         buffer[bytesRead] = '\0';
@@ -131,7 +146,10 @@ void SocketIOServer::handleWebSocketHandshake(int clientSocket, const std::strin
                               "Connection: close\r\n"
                               "\r\n"
                               "Socket.IO server running";
-        send(clientSocket, response.c_str(), response.length(), 0);
+        ssize_t sent = send(clientSocket, response.c_str(), response.length(), MSG_NOSIGNAL);
+        if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+            removeClient(clientSocket);
+        }
         return;
     }
     size_t keyPos = request.find("Sec-WebSocket-Key: ");
@@ -147,7 +165,11 @@ void SocketIOServer::handleWebSocketHandshake(int clientSocket, const std::strin
                           "Connection: Upgrade\r\n"
                           "Sec-WebSocket-Accept: " + encodedKey + "\r\n"
                           "\r\n";
-    send(clientSocket, response.c_str(), response.length(), 0);
+    ssize_t sent = send(clientSocket, response.c_str(), response.length(), MSG_NOSIGNAL);
+    if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+        removeClient(clientSocket);
+        return;
+    }
     lastSid = generateSID();
     std::ostringstream openPayload;
     openPayload << "0{"
@@ -254,7 +276,11 @@ std::string SocketIOServer::generateSocketIOPacket(const std::string& event, con
 std::string SocketIOServer::computeWebSocketAccept(const std::string& clientKey) {
     std::string magic = clientKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
     unsigned char hash[SHA_DIGEST_LENGTH];
-    SHA1(reinterpret_cast<const unsigned char*>(magic.c_str()), magic.size(), hash);
+    if (SHA1(reinterpret_cast<const unsigned char*>(magic.c_str()), magic.size(), hash) != 0) {
+        // Fallback if SHA1 fails
+        std::string fallback = "ERROR_HASH_FAILED";
+        return base64EncodeBytes(reinterpret_cast<const unsigned char*>(fallback.c_str()), fallback.size());
+    }
     return base64EncodeBytes(hash, SHA_DIGEST_LENGTH);
 }
 
@@ -275,14 +301,29 @@ void SocketIOServer::sendTextFrame(int clientSocket, const std::string& payload)
         frame.append(reinterpret_cast<const char*>(&be), sizeof(be));
     }
     frame.append(payload);
-    send(clientSocket, frame.c_str(), frame.size(), 0);
+    
+    // Handle SIGPIPE to prevent broken pipe errors
+    ssize_t sent = send(clientSocket, frame.c_str(), frame.size(), MSG_NOSIGNAL);
+    if (sent == -1) {
+        if (errno == EPIPE || errno == ECONNRESET) {
+            std::cerr << "Client disconnected (broken pipe)" << std::endl;
+            removeClient(clientSocket);
+        } else {
+            std::cerr << "Send error: " << strerror(errno) << std::endl;
+        }
+    }
 }
 
 bool SocketIOServer::recvExact(int clientSocket, char* buf, size_t len) {
     size_t got = 0;
     while (got < len) {
-        ssize_t n = recv(clientSocket, buf + got, len - got, 0);
-        if (n <= 0) return false;
+        ssize_t n = recv(clientSocket, buf + got, len - got, MSG_NOSIGNAL);
+        if (n <= 0) {
+            if (errno == EPIPE || errno == ECONNRESET) {
+                removeClient(clientSocket);
+            }
+            return false;
+        }
         got += static_cast<size_t>(n);
     }
     return true;
@@ -371,7 +412,10 @@ void SocketIOServer::handleHttpRequest(int clientSocket, const std::string& requ
                           "Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\n";
     if (method == "OPTIONS") {
         response += "Content-Length: 0\r\n\r\n";
-        send(clientSocket, response.c_str(), response.length(), 0);
+        ssize_t sent = send(clientSocket, response.c_str(), response.length(), MSG_NOSIGNAL);
+        if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+            removeClient(clientSocket);
+        }
         return;
     }
     if (path != "/api/identity" && photoBoothServer && !photoBoothServer->identityRegistered()) {
@@ -379,7 +423,10 @@ void SocketIOServer::handleHttpRequest(int clientSocket, const std::string& requ
                              "Access-Control-Allow-Origin: *\r\n"
                              "Content-Type: application/json\r\n"
                              "Content-Length: 41\r\n\r\n{\"error\":\"identity_required\"}";
-        send(clientSocket, forbidden.c_str(), forbidden.length(), 0);
+        ssize_t sent = send(clientSocket, forbidden.c_str(), forbidden.length(), MSG_NOSIGNAL);
+        if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+            removeClient(clientSocket);
+        }
         return;
     }
     if (path == "/api/status" && method == "GET") {
@@ -407,31 +454,53 @@ void SocketIOServer::handleHttpRequest(int clientSocket, const std::string& requ
         if (st && st->hasIdentity()) {
             auto v = st->getLatest();
             data = v;
-            data["success"] = "true";
+            data["success"] = true;
         } else {
-            data["success"] = "false";
+            data["success"] = false;
         }
         std::string json = generateJsonResponse(data);
         std::string resp = generateHttpResponse(json, "application/json");
-        send(clientSocket, resp.c_str(), resp.length(), 0);
+        ssize_t sent = send(clientSocket, resp.c_str(), resp.length(), MSG_NOSIGNAL);
+        if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+            removeClient(clientSocket);
+            return;
+        }
     } else if (path == "/api/identity" && method == "POST") {
+        std::cout << "📥 Received POST /api/identity request" << std::endl;
         size_t clPos = request.find("Content-Length:");
         size_t bodyPos = request.find("\r\n\r\n");
         std::string body;
         if (clPos != std::string::npos && bodyPos != std::string::npos) {
             size_t clEnd = request.find("\r\n", clPos);
             std::string clStr = request.substr(clPos + 15, clEnd - clPos - 15);
-            int len = 0; try { len = std::stoi(clStr); } catch (...) { len = 0; }
-            if (len > 0) {
+            int len = 0;
+            try {
+                len = std::stoi(clStr);
+                std::cout << "📏 Content-Length: " << len << std::endl;
+            } catch (...) {
+                len = 0;
+                std::cout << "❌ Failed to parse Content-Length" << std::endl;
+            }
+            if (len > 0 && len < 10000) { // Add reasonable size limit
                 std::string rest;
                 rest.resize(static_cast<size_t>(len));
                 if (!recvExact(clientSocket, &rest[0], static_cast<size_t>(len))) {
+                    std::cout << "❌ Failed to receive request body" << std::endl;
                     std::string bad = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
-                    send(clientSocket, bad.c_str(), bad.length(), 0);
+                    ssize_t sent = send(clientSocket, bad.c_str(), bad.length(), MSG_NOSIGNAL);
+                    if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+                        removeClient(clientSocket);
+                        return;
+                    }
                     return;
                 }
                 body = rest;
+                std::cout << "📦 Received body: " << body << std::endl;
+            } else {
+                std::cout << "❌ Invalid body length: " << len << std::endl;
             }
+        } else {
+            std::cout << "❌ Missing Content-Length or body separator" << std::endl;
         }
         std::map<std::string, std::string> parsed;
         parseJsonObject(body, parsed, "");
@@ -439,28 +508,69 @@ void SocketIOServer::handleHttpRequest(int clientSocket, const std::string& requ
         std::string enc;
         if (parsed.count("encrypted_data")) enc = parsed["encrypted_data"];
         std::string locStr;
+        
+        // Parse nested location object properly
         if (parsed.count("location.lat") && parsed.count("location.lng")) {
             locStr = parsed["location.lat"] + "," + parsed["location.lng"];
         } else if (parsed.count("location")) {
             locStr = parsed["location"];
+        } else {
+            // Try to parse location object from raw JSON
+            size_t locStart = body.find("\"location\":");
+            if (locStart != std::string::npos) {
+                locStart = body.find("{", locStart);
+                if (locStart != std::string::npos) {
+                    size_t locEnd = body.find("}", locStart);
+                    if (locEnd != std::string::npos) {
+                        std::string locObj = body.substr(locStart, locEnd - locStart + 1);
+                        std::map<std::string, std::string> locParsed;
+                        parseJsonObject(locObj, locParsed, "");
+                        if (locParsed.count("lat") && locParsed.count("lng")) {
+                            locStr = locParsed["lat"] + "," + locParsed["lng"];
+                        }
+                    }
+                }
+            }
         }
+        
+        std::cout << "🔍 Parsed booth_name: " << boothName << std::endl;
+        std::cout << "🔍 Parsed location: " << locStr << std::endl;
+        std::cout << "🔍 Parsed encrypted_data: " << (enc.empty() ? "(empty)" : "(present)") << std::endl;
+        
         bool ok = false;
         if (!boothName.empty() && !locStr.empty()) {
             auto st = photoBoothServer->getIdentityStore();
-            if (st) ok = st->save(boothName, locStr, enc);
+            if (st) {
+                ok = st->save(boothName, locStr, enc);
+                std::cout << "💾 Save result: " << (ok ? "SUCCESS" : "FAILED") << std::endl;
+            } else {
+                std::cout << "❌ Identity store is null" << std::endl;
+            }
+        } else {
+            std::cout << "❌ Missing required fields - booth_name: " << (boothName.empty() ? "MISSING" : "OK")
+                      << ", location: " << (locStr.empty() ? "MISSING" : "OK") << std::endl;
         }
         std::map<std::string, std::string> res;
         res["success"] = ok ? "true" : "false";
         if (!ok) res["error"] = "store_failed";
         std::string json = generateJsonResponse(res);
         std::string resp = generateHttpResponse(json, "application/json");
-        send(clientSocket, resp.c_str(), resp.length(), 0);
+        ssize_t sent = send(clientSocket, resp.c_str(), resp.length(), MSG_NOSIGNAL);
+        if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+            removeClient(clientSocket);
+            return;
+        }
+        std::cout << "✅ Response sent successfully" << std::endl;
     } else {
         std::string notFound = "HTTP/1.1 404 Not Found\r\n"
                              "Access-Control-Allow-Origin: *\r\n"
                              "Content-Type: text/plain\r\n"
                              "Content-Length: 9\r\n\r\nNot Found";
-        send(clientSocket, notFound.c_str(), notFound.length(), 0);
+        ssize_t sent = send(clientSocket, notFound.c_str(), notFound.length(), MSG_NOSIGNAL);
+        if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+            removeClient(clientSocket);
+            return;
+        }
     }
 }
 
@@ -472,7 +582,10 @@ void SocketIOServer::handleApiStatusRequest(int clientSocket) {
         << ",\"message\":\"" << (connected ? "Kamera terhubung" : "Kamera tidak terhubung (mode simulasi)") << "\"}";
     std::string json = oss.str();
     std::string response = generateHttpResponse(json, "application/json");
-    send(clientSocket, response.c_str(), response.length(), 0);
+    ssize_t sent = send(clientSocket, response.c_str(), response.length(), MSG_NOSIGNAL);
+    if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+        removeClient(clientSocket);
+    }
 }
 
 void SocketIOServer::handleApiPhotosRequest(int clientSocket) {
@@ -487,14 +600,20 @@ void SocketIOServer::handleApiPhotosRequest(int clientSocket) {
     }
     json += "]}";
     std::string response = generateHttpResponse(json, "application/json");
-    send(clientSocket, response.c_str(), response.length(), 0);
+    ssize_t sent = send(clientSocket, response.c_str(), response.length(), MSG_NOSIGNAL);
+    if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+        removeClient(clientSocket);
+    }
 }
 
 void SocketIOServer::handleApiPreviewRequest(int clientSocket) {
     auto result = photoBoothServer->getGPhotoWrapper()->capturePreviewFrame();
     std::string json = generateJsonResponse(result);
     std::string response = generateHttpResponse(json, "application/json");
-    send(clientSocket, response.c_str(), response.length(), 0);
+    ssize_t sent = send(clientSocket, response.c_str(), response.length(), MSG_NOSIGNAL);
+    if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+        removeClient(clientSocket);
+    }
 }
 
 void SocketIOServer::handleApiPhotoDeleteRequest(int clientSocket, const std::string& filename) {
@@ -506,7 +625,11 @@ void SocketIOServer::handleApiPhotoDeleteRequest(int clientSocket, const std::st
     }
     std::string json = generateJsonResponse(data);
     std::string response = generateHttpResponse(json, "application/json");
-    send(clientSocket, response.c_str(), response.length(), 0);
+    ssize_t sent = send(clientSocket, response.c_str(), response.length(), MSG_NOSIGNAL);
+    if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+        removeClient(clientSocket);
+        return;
+    }
 }
 
 void SocketIOServer::handleImageRequest(int clientSocket, const std::string& filename, const std::map<std::string, std::string>& queryParams) {
@@ -516,7 +639,11 @@ void SocketIOServer::handleImageRequest(int clientSocket, const std::string& fil
         std::string forbidden = "HTTP/1.1 403 Forbidden\r\n"
                               "Access-Control-Allow-Origin: *\r\n"
                               "Content-Length: 9\r\n\r\nForbidden";
-        send(clientSocket, forbidden.c_str(), forbidden.length(), 0);
+        ssize_t sent = send(clientSocket, forbidden.c_str(), forbidden.length(), MSG_NOSIGNAL);
+        if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+            removeClient(clientSocket);
+            return;
+        }
         return;
     }
     std::string filePath = "uploads/" + filename;
@@ -525,7 +652,11 @@ void SocketIOServer::handleImageRequest(int clientSocket, const std::string& fil
         std::string notFound = "HTTP/1.1 404 Not Found\r\n"
                               "Access-Control-Allow-Origin: *\r\n"
                               "Content-Length: 9\r\n\r\nNot Found";
-        send(clientSocket, notFound.c_str(), notFound.length(), 0);
+        ssize_t sent = send(clientSocket, notFound.c_str(), notFound.length(), MSG_NOSIGNAL);
+        if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+            removeClient(clientSocket);
+            return;
+        }
         return;
     }
     auto effectIt = queryParams.find("effect");
@@ -568,8 +699,16 @@ void SocketIOServer::handleImageRequest(int clientSocket, const std::string& fil
         << "Cache-Control: public, max-age=86400\r\n"
         << "\r\n";
     std::string header = oss.str();
-    send(clientSocket, header.c_str(), header.length(), 0);
-    send(clientSocket, reinterpret_cast<const char*>(imageData.data()), imageData.size(), 0);
+    ssize_t sent = send(clientSocket, header.c_str(), header.length(), MSG_NOSIGNAL);
+    if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+        removeClient(clientSocket);
+        return;
+    }
+    sent = send(clientSocket, reinterpret_cast<const char*>(imageData.data()), imageData.size(), MSG_NOSIGNAL);
+    if (sent == -1 && (errno == EPIPE || errno == ECONNRESET)) {
+        removeClient(clientSocket);
+        return;
+    }
 }
 
 std::string SocketIOServer::generateHttpResponse(const std::string& content, const std::string& contentType) {

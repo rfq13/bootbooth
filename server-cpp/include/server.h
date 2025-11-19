@@ -81,6 +81,7 @@
     // Deklarasi fungsi SHA1 stub
     inline int SHA1(const unsigned char *d, size_t n, unsigned char *md) {
         // Stub implementation - return error
+        (void)d; (void)n; (void)md; // Suppress unused parameter warnings
         return -1;
     }
 #endif
@@ -106,6 +107,7 @@ namespace filesystem_compat {
     inline std::vector<std::string> directory_entries(const std::string& path) {
         std::vector<std::string> entries;
         // Implementasi sederhana, bisa diperbaiki nanti
+        (void)path; // Suppress unused parameter warning
         return entries;
     }
 }
@@ -119,7 +121,7 @@ namespace std {
 
 // Konstanta
 const int API_PORT = 3001;
-const int MJPEG_PORT = 8080;
+const int MJPEG_PORT = 3003;
 
 // Struktur untuk kamera
 struct Camera {
