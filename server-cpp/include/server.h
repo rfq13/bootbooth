@@ -380,6 +380,13 @@ private:
     void handleHttpApiIdentityGetRequest(connection_hdl hdl);
     void handleHttpApiIdentityPostRequest(connection_hdl hdl, websocket_server::connection_ptr con);
     void handleHttpApiPhotoDeleteRequest(connection_hdl hdl, const std::string& filename);
+    
+    // Static file serving handlers
+    std::string getMimeTypeFromExtension(const std::string& filename);
+    bool isPathSafe(const std::string& path);
+    bool fileExists(const std::string& filepath);
+    std::vector<uint8_t> readBinaryFile(const std::string& filepath);
+    void handleStaticFileRequest(connection_hdl hdl, const std::string& path);
 };
 
 // Kelas HTTP Server utama

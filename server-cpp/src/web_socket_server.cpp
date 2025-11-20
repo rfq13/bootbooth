@@ -579,7 +579,12 @@ void WebSocketServer::onHttpRequest(connection_hdl hdl) {
         } else if (path.find("/api/photos/") == 0 && method == "DELETE") {
             std::string filename = path.substr(12);
             handleHttpApiPhotoDeleteRequest(hdl, filename);
+        } else if (path.substr(0, 9) == "/uploads/" && method == "GET") {
+            // Handle static file requests for uploads directory
+            std::cout << "🔍 DEBUG: Routing to handleStaticFileRequest with path: " << path << std::endl;
+            handleStaticFileRequest(hdl, path);
         } else {
+            std::cout << "🔍 DEBUG: No route found for path: " << path << std::endl;
             sendHttpResponse(hdl, 404, "{\"error\":\"Not Found\"}", "application/json", true);
         }
         
@@ -740,4 +745,163 @@ void WebSocketServer::handleHttpApiPhotoDeleteRequest(connection_hdl hdl, const 
     }
     std::string json = generateJsonResponseWithBoolean(data);
     sendHttpResponse(hdl, 200, json, "application/json", true);
+}
+
+// Static file serving implementation
+std::string WebSocketServer::getMimeTypeFromExtension(const std::string& filename) {
+    size_t dotPos = filename.find_last_of('.');
+    if (dotPos == std::string::npos) {
+        return "application/octet-stream";
+    }
+    
+    std::string extension = filename.substr(dotPos + 1);
+    std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+    
+    if (extension == "jpg" || extension == "jpeg") {
+        return "image/jpeg";
+    } else if (extension == "png") {
+        return "image/png";
+    } else if (extension == "gif") {
+        return "image/gif";
+    } else if (extension == "webp") {
+        return "image/webp";
+    }
+    
+    return "application/octet-stream";
+}
+
+bool WebSocketServer::isPathSafe(const std::string& path) {
+    // Prevent path traversal attacks
+    if (path.find("..") != std::string::npos) {
+        return false;
+    }
+    
+    // Ensure path starts with uploads/
+    if (path.substr(0, 9) != "/uploads/") {
+        return false;
+    }
+    
+    return true;
+}
+
+bool WebSocketServer::fileExists(const std::string& filepath) {
+    // The filepath already includes "uploads/" prefix from the URL path
+    // But we need to check if it exists relative to the current working directory
+    std::string fullPath = filepath;
+    
+    // If the path starts with "/uploads/", remove the leading slash
+    if (fullPath.find("/uploads/") == 0) {
+        fullPath = fullPath.substr(1);
+    }
+    
+#ifdef _WIN32
+    return _access(fullPath.c_str(), F_OK) == 0;
+#else
+    return access(fullPath.c_str(), F_OK) == 0;
+#endif
+}
+
+std::vector<uint8_t> WebSocketServer::readBinaryFile(const std::string& filepath) {
+    std::vector<uint8_t> buffer;
+    
+    // The filepath already includes "uploads/" prefix from the URL path
+    // But we need to read it relative to the current working directory
+    std::string fullPath = filepath;
+    
+    // If the path starts with "/uploads/", remove the leading slash
+    if (fullPath.find("/uploads/") == 0) {
+        fullPath = fullPath.substr(1);
+    }
+    
+    std::ifstream file(fullPath, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        return buffer;
+    }
+    
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    
+    buffer.resize(size);
+    if (!file.read(reinterpret_cast<char*>(buffer.data()), size)) {
+        buffer.clear();
+    }
+    
+    return buffer;
+}
+
+void WebSocketServer::handleStaticFileRequest(connection_hdl hdl, const std::string& path) {
+    std::cout << "🔍 DEBUG: handleStaticFileRequest called with path: " << path << std::endl;
+    
+    // Check if path is safe
+    if (!isPathSafe(path)) {
+        std::cout << "🔍 DEBUG: Path is not safe: " << path << std::endl;
+        sendHttpResponse(hdl, 403, "{\"error\":\"Forbidden\"}", "application/json", true);
+        return;
+    }
+    
+    // The filepath already includes "uploads/" prefix from the URL path
+    // But we need to check if it exists relative to the current working directory
+    std::string fullPath = path;
+    
+    // If the path starts with "/uploads/", remove the leading slash
+    if (fullPath.find("/uploads/") == 0) {
+        fullPath = fullPath.substr(1);
+    }
+    
+    std::cout << "🔍 DEBUG: Full path to check: " << fullPath << std::endl;
+    
+    // Check if file exists
+    if (!fileExists(fullPath)) {
+        std::cout << "🔍 DEBUG: File does not exist: " << fullPath << std::endl;
+        sendHttpResponse(hdl, 404, "{\"error\":\"File Not Found\"}", "application/json", true);
+        return;
+    }
+    
+    // Read file content
+    std::vector<uint8_t> fileContent = readBinaryFile(fullPath);
+    if (fileContent.empty()) {
+        std::cout << "🔍 DEBUG: Failed to read file: " << fullPath << std::endl;
+        sendHttpResponse(hdl, 500, "{\"error\":\"Internal Server Error\"}", "application/json", true);
+        return;
+    }
+    
+    // Get MIME type
+    std::string mimeType = getMimeTypeFromExtension(path);
+    
+    try {
+        auto con = wsServer->get_con_from_hdl(hdl);
+        auto response = std::make_shared<websocketpp::http::parser::response>();
+        
+        // Set status
+        response->set_status(websocketpp::http::status_code::value(200), "OK");
+        
+        // Set body as binary data
+        std::string bodyStr(fileContent.begin(), fileContent.end());
+        response->set_body(bodyStr);
+        
+        // Set headers
+        response->append_header("Content-Type", mimeType);
+        response->append_header("Content-Length", std::to_string(fileContent.size()));
+        response->append_header("Cache-Control", "max-age=3600");
+        
+        // Add CORS headers
+        response->append_header("Access-Control-Allow-Origin", "*");
+        response->append_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        response->append_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        
+        con->set_body(response->get_body());
+        con->set_status(response->get_status_code());
+        
+        // Copy headers
+        auto headers = response->get_headers();
+        for (const auto& header : headers) {
+            con->replace_header(header.first, header.second);
+        }
+        
+        std::cout << "📤 Static file served: " << path << " (" << fileContent.size() << " bytes, " << mimeType << ")" << std::endl;
+        
+    } catch (const std::exception& e) {
+        std::cerr << "Error serving static file: " << e.what() << std::endl;
+        sendHttpResponse(hdl, 500, "{\"error\":\"Internal Server Error\"}", "application/json", true);
+    }
 }
