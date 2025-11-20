@@ -19,10 +19,11 @@
 #include <cstring>
 #include <algorithm>
 #include <random>
+#include <regex>
 
 // Include WebSocket++ server library
-#include "../sioclient/lib/websocketpp/websocketpp/server.hpp"
-#include "../sioclient/lib/websocketpp/websocketpp/config/asio_no_tls.hpp"
+#include <websocketpp/server.hpp>
+#include <websocketpp/config/asio.hpp>
 
 // Kompabilitas Windows
 #ifdef _WIN32
@@ -80,21 +81,11 @@
     #include <sys/stat.h>
     #include <csignal>
     #include <sys/wait.h>
+    #include <dirent.h>
 #endif
 
-// OpenSSL - hanya include jika tersedia
-#ifdef HAVE_OPENSSL
-    #include <openssl/sha.h>
-#else
-    // Fallback definisi jika OpenSSL tidak tersedia
-    #define SHA_DIGEST_LENGTH 20
-    // Deklarasi fungsi SHA1 stub
-    inline int SHA1(const unsigned char *d, size_t n, unsigned char *md) {
-        // Stub implementation - return error
-        (void)d; (void)n; (void)md; // Suppress unused parameter warnings
-        return -1;
-    }
-#endif
+// OpenSSL - include OpenSSL headers
+#include <openssl/sha.h>
 
 // Filesystem operations wrapper untuk kompatibilitas
 namespace filesystem_compat {
@@ -116,8 +107,44 @@ namespace filesystem_compat {
     
     inline std::vector<std::string> directory_entries(const std::string& path) {
         std::vector<std::string> entries;
-        // Implementasi sederhana, bisa diperbaiki nanti
-        (void)path; // Suppress unused parameter warning
+        
+#ifdef _WIN32
+        // Windows implementation
+        WIN32_FIND_DATAA findData;
+        HANDLE hFind = INVALID_HANDLE_VALUE;
+        
+        std::string searchPath = path + "\\*";
+        hFind = FindFirstFileA(searchPath.c_str(), &findData);
+        
+        if (hFind != INVALID_HANDLE_VALUE) {
+            do {
+                if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                    entries.push_back(std::string(findData.cFileName));
+                }
+            } while (FindNextFileA(hFind, &findData) != 0);
+            FindClose(hFind);
+        }
+#else
+        // Linux/Unix implementation using opendir/readdir
+        DIR* dir = opendir(path.c_str());
+        if (dir != nullptr) {
+            struct dirent* entry;
+            while ((entry = readdir(dir)) != nullptr) {
+                if (entry->d_type == DT_REG) { // Regular file
+                    entries.push_back(std::string(entry->d_name));
+                } else if (entry->d_type == DT_UNKNOWN) {
+                    // Fallback: use stat to determine if it's a regular file
+                    std::string fullPath = path + "/" + entry->d_name;
+                    struct stat statbuf;
+                    if (stat(fullPath.c_str(), &statbuf) == 0 && S_ISREG(statbuf.st_mode)) {
+                        entries.push_back(std::string(entry->d_name));
+                    }
+                }
+            }
+            closedir(dir);
+        }
+#endif
+        
         return entries;
     }
 }
@@ -292,7 +319,7 @@ private:
     void processFrameBuffer(std::vector<unsigned char>& buffer);
 };
 
-// WebSocket++ server type definition
+// WebSocket++ server type definition (changed from asio_tls to asio for non-TLS)
 typedef websocketpp::server<websocketpp::config::asio> websocket_server;
 typedef websocketpp::connection_hdl connection_hdl;
 
@@ -325,6 +352,7 @@ private:
     void onOpen(connection_hdl hdl);
     void onClose(connection_hdl hdl);
     void onMessage(connection_hdl hdl, websocket_server::message_ptr msg);
+    void onHttpRequest(connection_hdl hdl);
     std::string mapToJsonObject(const std::map<std::string, std::string>& data);
     
     // WebSocket message handling
@@ -341,6 +369,17 @@ private:
     std::string generateJsonResponse(const std::map<std::string, std::string>& data);
     std::string generateJsonResponseWithBoolean(const std::map<std::string, std::string>& data);
     std::map<std::string, std::string> parseQueryString(const std::string& query);
+    
+    // HTTP response handling
+    void sendHttpResponse(connection_hdl hdl, int statusCode, const std::string& body,
+                         const std::string& contentType, bool includeCors);
+    
+    // HTTP API handlers
+    void handleHttpApiStatusRequest(connection_hdl hdl);
+    void handleHttpApiPhotosRequest(connection_hdl hdl);
+    void handleHttpApiIdentityGetRequest(connection_hdl hdl);
+    void handleHttpApiIdentityPostRequest(connection_hdl hdl, websocket_server::connection_ptr con);
+    void handleHttpApiPhotoDeleteRequest(connection_hdl hdl, const std::string& filename);
 };
 
 // Kelas HTTP Server utama
@@ -406,5 +445,6 @@ bool createDirectories(const std::string& path);
 std::vector<std::string> splitString(const std::string& s, char delimiter);
 std::string urlEncode(const std::string& str);
 void parseJsonObject(const std::string& jsonStr, std::map<std::string, std::string>& result, const std::string& prefix);
+void parseEventJson(const std::string& jsonStr, std::map<std::string, std::string>& result);
 
 #endif // SERVER_H

@@ -3,6 +3,8 @@
 #include <cerrno>
 #include <sys/time.h>
 #include <cstring>
+#include <sstream>
+#include <regex>
 
 WebSocketServer::WebSocketServer(int port, PhotoBoothServer* photoBoothServer)
     : port(port), running(false), photoBoothServer(photoBoothServer) {
@@ -45,6 +47,11 @@ bool WebSocketServer::start() {
         // Set the message handler
         wsServer->set_message_handler([this](connection_hdl hdl, websocket_server::message_ptr msg) {
             this->onMessage(hdl, msg);
+        });
+        
+        // Set the HTTP handler untuk regular HTTP requests
+        wsServer->set_http_handler([this](connection_hdl hdl) {
+            this->onHttpRequest(hdl);
         });
         
         // Listen on the specified port
@@ -199,16 +206,19 @@ void WebSocketServer::onMessage(connection_hdl hdl, websocket_server::message_pt
 
 void WebSocketServer::handleWebSocketMessage(connection_hdl hdl, const std::string& message) {
     try {
-        // Parse JSON message
+        // Parse JSON message using new event parser that preserves nested structure
         std::map<std::string, std::string> parsedData;
-        parseJsonObject(message, parsedData, "");
+        parseEventJson(message, parsedData);
         
         // Check if this is an event message
         if (parsedData.count("event") && parsedData.count("data")) {
             std::string eventName = parsedData["event"];
             std::string dataStr = parsedData["data"];
             
-            // Parse the data object
+            std::cout << "📋 Event: " << eventName << std::endl;
+            std::cout << "📋 Data (preserved): " << dataStr << std::endl;
+            
+            // Parse the data object using the original parser for flat processing
             std::map<std::string, std::string> eventData;
             parseJsonObject(dataStr, eventData, "");
             
@@ -237,6 +247,13 @@ void WebSocketServer::handleEvent(connection_hdl hdl, const std::string& event, 
         } else if (event == "stop-mjpeg") {
             this->photoBoothServer->handleStopMjpegEvent(hdl);
         } else if (event == "capture-photo") {
+            std::cout << "🔍 DEBUG: capture-photo event detected" << std::endl;
+            std::cout << "🔍 DEBUG: Data available: " << (data.empty() ? "NO" : "YES") << std::endl;
+            std::cout << "🔍 DEBUG: Data content:" << std::endl;
+            for (const auto& pair : data) {
+                std::cout << "  " << pair.first << " = " << pair.second << std::endl;
+            }
+            std::cout << "🚨 CRITICAL: handleCapturePhotoEvent() does NOT receive data parameter!" << std::endl;
             this->photoBoothServer->handleCapturePhotoEvent(hdl);
         } else if (event == "set-effect") {
             this->photoBoothServer->handleSetEffectEvent(hdl, data);
@@ -521,4 +538,206 @@ std::map<std::string, std::string> WebSocketServer::parseQueryString(const std::
         }
     }
     return result;
+}
+
+// HTTP request handler
+void WebSocketServer::onHttpRequest(connection_hdl hdl) {
+    try {
+        auto con = wsServer->get_con_from_hdl(hdl);
+        auto request = con->get_request();
+        
+        std::string method = request.get_method();
+        std::string uri = request.get_uri();
+        std::string path = uri;
+        
+        // Parse query parameters
+        size_t queryPos = path.find('?');
+        std::map<std::string, std::string> queryParams;
+        if (queryPos != std::string::npos) {
+            std::string queryString = path.substr(queryPos + 1);
+            path = path.substr(0, queryPos);
+            queryParams = parseQueryString(queryString);
+        }
+        
+        std::cout << "🌐 HTTP Request: " << method << " " << path << std::endl;
+        
+        // Handle CORS preflight requests
+        if (method == "OPTIONS") {
+            sendHttpResponse(hdl, 200, "", "application/json", true);
+            return;
+        }
+        
+        // Handle API endpoints
+        if (path == "/api/status" && method == "GET") {
+            handleHttpApiStatusRequest(hdl);
+        } else if (path == "/api/photos" && method == "GET") {
+            handleHttpApiPhotosRequest(hdl);
+        } else if (path == "/api/identity" && method == "GET") {
+            handleHttpApiIdentityGetRequest(hdl);
+        } else if (path == "/api/identity" && method == "POST") {
+            handleHttpApiIdentityPostRequest(hdl, con);
+        } else if (path.find("/api/photos/") == 0 && method == "DELETE") {
+            std::string filename = path.substr(12);
+            handleHttpApiPhotoDeleteRequest(hdl, filename);
+        } else {
+            sendHttpResponse(hdl, 404, "{\"error\":\"Not Found\"}", "application/json", true);
+        }
+        
+    } catch (const std::exception& e) {
+        std::cerr << "Error handling HTTP request: " << e.what() << std::endl;
+        sendHttpResponse(hdl, 500, "{\"error\":\"Internal Server Error\"}", "application/json", true);
+    }
+}
+
+// Send HTTP response with CORS headers
+void WebSocketServer::sendHttpResponse(connection_hdl hdl, int statusCode, const std::string& body,
+                                     const std::string& contentType, bool includeCors) {
+    try {
+        auto con = wsServer->get_con_from_hdl(hdl);
+        auto response = std::make_shared<websocketpp::http::parser::response>();
+        
+        // Set status
+        std::string statusText;
+        switch (statusCode) {
+            case 200: statusText = "OK"; break;
+            case 404: statusText = "Not Found"; break;
+            case 500: statusText = "Internal Server Error"; break;
+            default: statusText = "Unknown"; break;
+        }
+        
+        response->set_status(websocketpp::http::status_code::value(statusCode), statusText);
+        response->set_body(body);
+        response->append_header("Content-Type", contentType);
+        response->append_header("Content-Length", std::to_string(body.length()));
+        
+        // Add CORS headers
+        if (includeCors) {
+            response->append_header("Access-Control-Allow-Origin", "*");
+            response->append_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+            response->append_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        }
+        
+        con->set_body(response->get_body());
+        con->set_status(response->get_status_code());
+        
+        // Copy headers
+        auto headers = response->get_headers();
+        for (const auto& header : headers) {
+            con->replace_header(header.first, header.second);
+        }
+        
+        std::cout << "📤 HTTP Response: " << statusCode << " " << statusText
+                  << " | Body: " << (body.length() > 100 ? body.substr(0, 100) + "..." : body) << std::endl;
+        
+    } catch (const std::exception& e) {
+        std::cerr << "Error sending HTTP response: " << e.what() << std::endl;
+    }
+}
+
+// HTTP API handlers
+void WebSocketServer::handleHttpApiStatusRequest(connection_hdl hdl) {
+    std::vector<Camera> cameras = photoBoothServer->getGPhotoWrapper()->detectCamera();
+    bool connected = !cameras.empty();
+    std::ostringstream oss;
+    oss << "{\"cameraConnected\":" << (connected ? "true" : "false")
+        << ",\"message\":\"" << (connected ? "Kamera terhubung" : "Kamera tidak terhubung (mode simulasi)") << "\"}";
+    sendHttpResponse(hdl, 200, oss.str(), "application/json", true);
+}
+
+void WebSocketServer::handleHttpApiPhotosRequest(connection_hdl hdl) {
+    std::vector<Photo> photos = photoBoothServer->getPhotosList();
+    std::string json = "{\"photos\":[";
+    for (size_t i = 0; i < photos.size(); ++i) {
+        if (i > 0) json += ",";
+        json += "{\"filename\":\"" + photos[i].filename + "\",";
+        json += "\"path\":\"" + photos[i].path + "\",";
+        json += "\"timestamp\":" + std::to_string(photos[i].timestamp) + ",";
+        json += "\"simulated\":" + std::string(photos[i].simulated ? "true" : "false") + "}";
+    }
+    json += "]}";
+    sendHttpResponse(hdl, 200, json, "application/json", true);
+}
+
+void WebSocketServer::handleHttpApiIdentityGetRequest(connection_hdl hdl) {
+    auto st = photoBoothServer->getIdentityStore();
+    std::map<std::string, std::string> responseData;
+    if (st && st->hasIdentity()) {
+        auto v = st->getLatest();
+        responseData = v;
+        responseData["success"] = "true";
+    } else {
+        responseData["success"] = "false";
+    }
+    std::string json = generateJsonResponseWithBoolean(responseData);
+    sendHttpResponse(hdl, 200, json, "application/json", true);
+}
+
+void WebSocketServer::handleHttpApiIdentityPostRequest(connection_hdl hdl, websocket_server::connection_ptr con) {
+    std::string body = con->get_request().get_body();
+    std::cout << "📥 Received POST /api/identity request with body: " << body << std::endl;
+    
+    // Parse JSON body (simple parsing for booth_name and location)
+    std::string boothName = "";
+    std::string location = "";
+    std::string encryptedData = "";
+    
+    // Simple JSON parsing using regex
+    std::regex boothNameRegex("\"booth_name\"\\s*:\\s*\"([^\"]+)\"");
+    std::regex locationRegex("\"location\"\\s*:\\s*\"([^\"]+)\"");
+    std::regex encryptedDataRegex("\"encrypted_data\"\\s*:\\s*\"([^\"]+)\"");
+    std::regex locationLatRegex("\"location\"\\s*:\\s*\\{\\s*\"lat\"\\s*:\\s*\"?([^\"]+)\"?\\s*,\\s*\"lng\"\\s*:\\s*\"?([^\"]+)\"?\\s*\\}");
+    std::regex locationLatNumericRegex("\"location\"\\s*:\\s*\\{\\s*\"lat\"\\s*:\\s*([-\\d.]+)\\s*,\\s*\"lng\"\\s*:\\s*([-\\d.]+)\\s*\\}");
+    
+    std::smatch match;
+    if (std::regex_search(body, match, boothNameRegex)) {
+        boothName = match[1].str();
+    }
+    
+    if (std::regex_search(body, match, locationLatRegex)) {
+        location = match[1].str() + "," + match[2].str();
+    } else if (std::regex_search(body, match, locationLatNumericRegex)) {
+        location = match[1].str() + "," + match[2].str();
+    } else if (std::regex_search(body, match, locationRegex)) {
+        location = match[1].str();
+    }
+    
+    if (std::regex_search(body, match, encryptedDataRegex)) {
+        encryptedData = match[1].str();
+    }
+    
+    std::cout << "🔍 Parsed booth_name: " << boothName << std::endl;
+    std::cout << "🔍 Parsed location: " << location << std::endl;
+    std::cout << "🔍 Parsed encrypted_data: " << (encryptedData.empty() ? "(empty)" : "(present)") << std::endl;
+    
+    bool success = false;
+    if (!boothName.empty() && !location.empty()) {
+        auto st = photoBoothServer->getIdentityStore();
+        if (st) {
+            success = st->save(boothName, location, encryptedData);
+            std::cout << "💾 Save result: " << (success ? "SUCCESS" : "FAILED") << std::endl;
+        } else {
+            std::cout << "❌ Identity store is null" << std::endl;
+        }
+    } else {
+        std::cout << "❌ Missing required fields - booth_name: " << (boothName.empty() ? "MISSING" : "OK")
+                  << ", location: " << (location.empty() ? "MISSING" : "OK") << std::endl;
+    }
+    
+    std::map<std::string, std::string> response;
+    response["success"] = success ? "true" : "false";
+    if (!success) response["error"] = "store_failed";
+    std::string json = generateJsonResponseWithBoolean(response);
+    sendHttpResponse(hdl, 200, json, "application/json", true);
+    std::cout << "✅ Response sent successfully" << std::endl;
+}
+
+void WebSocketServer::handleHttpApiPhotoDeleteRequest(connection_hdl hdl, const std::string& filename) {
+    bool success = photoBoothServer->deletePhoto(filename);
+    std::map<std::string, std::string> data;
+    data["success"] = success ? "true" : "false";
+    if (!success) {
+        data["error"] = "Gagal menghapus foto";
+    }
+    std::string json = generateJsonResponseWithBoolean(data);
+    sendHttpResponse(hdl, 200, json, "application/json", true);
 }

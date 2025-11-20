@@ -7,6 +7,7 @@ import LayoutPage from "./components/LayoutPage.jsx";
 import { useNotify } from "./components/Notify.jsx";
 import { appState } from "./main.jsx";
 import { WS_URL, API_URL, BACKOFFICE_SOCKET_URL } from "./constants";
+import io from "socket.io-client";
 
 // DEBUG: WebSocket connection configuration
 console.log("🔍 DEBUG: Attempting to connect WebSocket to:", WS_URL);

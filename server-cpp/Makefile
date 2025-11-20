@@ -2,12 +2,11 @@
 
 # Compiler and flags
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -DBOOST_DATE_TIME_NO_LIB -DBOOST_REGEX_NO_LIB -DASIO_STANDALONE -D_WEBSOCKETPP_CPP11_STL_ -D_WEBSOCKETPP_CPP11_FUNCTIONAL_
+CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -DBOOST_DATE_TIME_NO_LIB -DBOOST_REGEX_NO_LIB -D_WEBSOCKETPP_CPP11_STL_ -D_WEBSOCKETPP_CPP11_FUNCTIONAL_
 LDFLAGS = -lpthread -ljpeg -lssl -lcrypto -lsqlite3
 
-# WebSocket++ and Asio paths
-SIO_CLIENT_DIR = sioclient
-SIO_INCLUDES = -I$(SIO_CLIENT_DIR)/src -I$(SIO_CLIENT_DIR)/lib/asio/asio/include -I$(SIO_CLIENT_DIR)/lib/websocketpp -I$(SIO_CLIENT_DIR)/lib/websocketpp/websocketpp -I$(SIO_CLIENT_DIR)/lib/rapidjson/include
+# WebSocket++ system library (no longer needs sioclient)
+WEBSOCKETPP_INCLUDES =
 
 # Boost include path (system boost installation)
 BOOST_INCLUDES = -I/usr/include/boost
@@ -53,7 +52,7 @@ $(TARGET): $(OBJECTS) | $(BIN_DIR)
 
 # Compile source files
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
-	$(CXX) $(CXXFLAGS) -I$(INC_DIR) $(SIO_INCLUDES) $(BOOST_INCLUDES) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -I$(INC_DIR) $(WEBSOCKETPP_INCLUDES) $(BOOST_INCLUDES) -c $< -o $@
 
 # Clean build artifacts
 clean:

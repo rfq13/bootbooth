@@ -57,10 +57,15 @@ bool PhotoBoothServer::identityRegistered() const {
 }
 
 std::vector<Photo> PhotoBoothServer::getPhotosList() {
+    std::cout << "🔍 DEBUG: getPhotosList() called" << std::endl;
     std::vector<Photo> photos;
     try {
+        std::cout << "🔍 DEBUG: Reading uploads directory..." << std::endl;
         auto entries = filesystem_compat::directory_entries("uploads");
+        std::cout << "🔍 DEBUG: Found " << entries.size() << " files in uploads directory" << std::endl;
+        
         for (const auto& filename : entries) {
+            std::cout << "🔍 DEBUG: Processing file: " << filename << std::endl;
             if (filename.size() > 4 &&
                 (filename.substr(filename.size() - 4) == ".jpg" ||
                  filename.substr(filename.size() - 5) == ".jpeg")) {
@@ -80,7 +85,17 @@ std::vector<Photo> PhotoBoothServer::getPhotosList() {
     } catch (const std::exception& e) {
         std::cerr << "Error reading uploads directory: " << e.what() << std::endl;
     }
+    
+    std::cout << "🔍 DEBUG: Total photos processed: " << photos.size() << std::endl;
+    for (const auto& photo : photos) {
+        std::cout << "🔍 DEBUG: Photo - filename: " << photo.filename
+                  << ", path: " << photo.path
+                  << ", timestamp: " << photo.timestamp
+                  << ", simulated: " << (photo.simulated ? "true" : "false") << std::endl;
+    }
+    
     std::sort(photos.begin(), photos.end(), [](const Photo& a, const Photo& b) { return a.timestamp > b.timestamp; });
+    std::cout << "🔍 DEBUG: Photos sorted, returning " << photos.size() << " photos" << std::endl;
     return photos;
 }
 
@@ -241,8 +256,13 @@ void PhotoBoothServer::handleStopMjpegEvent(connection_hdl hdl) {
 }
 
 void PhotoBoothServer::handleCapturePhotoEvent(connection_hdl hdl) {
+    std::cout << "🔍 DEBUG: handleCapturePhotoEvent() called" << std::endl;
+    std::cout << "🚨 CRITICAL: This function does NOT receive data parameter!" << std::endl;
+    std::cout << "🚨 CRITICAL: Effect and params data is LOST at this point!" << std::endl;
+    
     if (!identityRegistered()) { std::map<std::string, std::string> r; r["success"] = "false"; r["error"] = "identity_required"; if (webSocketServer) { webSocketServer->emitToClient(hdl, "photo-captured", r); } return; }
     std::cout << "📸 Capturing photo..." << std::endl;
+    std::cout << "🔍 DEBUG: No effect data available - function signature missing data parameter" << std::endl;
     bool wasActive = mjpegServer->isActive();
     if (wasActive) {
         std::cout << "⚠️ Stopping stream for capture..." << std::endl;

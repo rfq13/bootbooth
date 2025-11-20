@@ -136,3 +136,110 @@ std::string urlEncode(const std::string& str) {
     }
     return encoded;
 }
+
+void parseEventJson(const std::string& jsonStr, std::map<std::string, std::string>& result) {
+    std::cout << "🔍 Parsing Event JSON: " << jsonStr << std::endl;
+    
+    size_t pos = 0;
+    while (pos < jsonStr.length()) {
+        // Skip whitespace
+        while (pos < jsonStr.length() && (jsonStr[pos] == ' ' || jsonStr[pos] == '\t' ||
+               jsonStr[pos] == '\n' || jsonStr[pos] == '\r')) {
+            pos++;
+        }
+        
+        if (pos >= jsonStr.length() || jsonStr[pos] == '}') {
+            break;
+        }
+        
+        // Find key
+        size_t keyStart = jsonStr.find("\"", pos);
+        if (keyStart == std::string::npos) break;
+        size_t keyEnd = jsonStr.find("\"", keyStart + 1);
+        if (keyEnd == std::string::npos) break;
+        std::string key = jsonStr.substr(keyStart + 1, keyEnd - keyStart - 1);
+        
+        // Find colon
+        size_t colonPos = jsonStr.find(":", keyEnd);
+        if (colonPos == std::string::npos) break;
+        
+        // Find value start
+        size_t valueStart = colonPos + 1;
+        while (valueStart < jsonStr.length() && (jsonStr[valueStart] == ' ' || jsonStr[valueStart] == '\t')) {
+            valueStart++;
+        }
+        
+        if (valueStart >= jsonStr.length()) break;
+        
+        char valueChar = jsonStr[valueStart];
+        std::string value;
+        
+        if (valueChar == '{') {
+            // Handle nested object - preserve as JSON string
+            size_t nestedStart = valueStart;
+            int braceCount = 1;
+            size_t nestedEnd = nestedStart + 1;
+            while (nestedEnd < jsonStr.length() && braceCount > 0) {
+                if (jsonStr[nestedEnd] == '{') braceCount++;
+                else if (jsonStr[nestedEnd] == '}') braceCount--;
+                nestedEnd++;
+            }
+            if (braceCount == 0) {
+                value = jsonStr.substr(nestedStart, nestedEnd - nestedStart);
+                pos = nestedEnd;
+            } else {
+                break;
+            }
+        } else if (valueChar == '[') {
+            // Handle array - preserve as JSON string
+            size_t arrayStart = valueStart;
+            int bracketCount = 1;
+            size_t arrayEnd = arrayStart + 1;
+            while (arrayEnd < jsonStr.length() && bracketCount > 0) {
+                if (jsonStr[arrayEnd] == '[') bracketCount++;
+                else if (jsonStr[arrayEnd] == ']') bracketCount--;
+                arrayEnd++;
+            }
+            if (bracketCount == 0) {
+                value = jsonStr.substr(arrayStart, arrayEnd - arrayStart);
+                pos = arrayEnd;
+            } else {
+                break;
+            }
+        } else if (valueChar == '"') {
+            // Handle string
+            size_t valueEnd = jsonStr.find("\"", valueStart + 1);
+            if (valueEnd != std::string::npos) {
+                value = jsonStr.substr(valueStart + 1, valueEnd - valueStart - 1);
+                pos = valueEnd + 1;
+            } else {
+                break;
+            }
+        } else {
+            // Handle primitive values (number, boolean, null)
+            size_t valueEnd = valueStart;
+            while (valueEnd < jsonStr.length() &&
+                   jsonStr[valueEnd] != ',' &&
+                   jsonStr[valueEnd] != '}' &&
+                   jsonStr[valueEnd] != ' ' &&
+                   jsonStr[valueEnd] != '\t') {
+                valueEnd++;
+            }
+            value = jsonStr.substr(valueStart, valueEnd - valueStart);
+            pos = valueEnd;
+        }
+        
+        result[key] = value;
+        std::cout << "🔑 Parsed event key: " << key << " = " << value << std::endl;
+        
+        // Skip comma and whitespace
+        while (pos < jsonStr.length() &&
+               (jsonStr[pos] == ',' ||
+                jsonStr[pos] == ' ' ||
+                jsonStr[pos] == '\t' ||
+                jsonStr[pos] == '\n' ||
+                jsonStr[pos] == '\r')) {
+            pos++;
+        }
+    }
+}
