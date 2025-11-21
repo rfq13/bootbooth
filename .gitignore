@@ -108,6 +108,8 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
-server-cpp/bin
+server-cpp/bin/
+server-cpp/obj/
+server-cpp/data/
 backoffice-app/frontend/dist
 backoffice-app/frontend/dist-ssr

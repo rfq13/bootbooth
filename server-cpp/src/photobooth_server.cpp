@@ -496,8 +496,61 @@ void PhotoBoothServer::handleApplyEffectEvent(connection_hdl hdl, const std::map
               << ", intensity=" << params.intensity
               << ", radius=" << params.radius
               << ", pixelSize=" << params.pixelSize << std::endl;
+    
+    // Apply effect to MJPEG stream and GPhoto wrapper
     mjpegServer->setEffect(effect, params);
     gphoto->setEffect(effect, params);
+    
+    // Check if we need to apply effect to current photo
+    auto currentPhotoIt = data.find("currentPhoto");
+    if (currentPhotoIt != data.end() && currentPhotoIt->second == "true") {
+        std::cout << "🖼️ Applying effect to current photo" << std::endl;
+        
+        // Get the current photo filename from the client
+        auto filenameIt = data.find("filename");
+        if (filenameIt != data.end()) {
+            std::string filename = filenameIt->second;
+            std::cout << "📁 Processing photo file: " << filename << std::endl;
+            
+            // Apply effect to the photo file
+            std::string filePath = "uploads/" + filename;
+            std::vector<unsigned char> imageData = gphoto->readImageFile(filePath);
+            
+            if (!imageData.empty()) {
+                // Apply the effect using ImageEffects
+                ImageEffects imageEffects;
+                imageEffects.setEffect(effect, params);
+                std::vector<unsigned char> processedImageData = imageEffects.applyEffect(imageData);
+                
+                if (!processedImageData.empty()) {
+                    // Save the processed image back to the file
+                    if (gphoto->writeImageFile(filePath, processedImageData)) {
+                        std::cout << "✅ Effect applied to current photo successfully" << std::endl;
+                        
+                        // Notify client that the photo has been updated
+                        std::map<std::string, std::string> photoUpdateResponse;
+                        photoUpdateResponse["success"] = "true";
+                        photoUpdateResponse["filename"] = filename;
+                        photoUpdateResponse["effect"] = effectName;
+                        photoUpdateResponse["message"] = "Photo updated with effect";
+                        
+                        if (webSocketServer) {
+                            webSocketServer->emitToClient(hdl, "photo-effect-applied", photoUpdateResponse);
+                        }
+                    } else {
+                        std::cout << "❌ Failed to save processed image" << std::endl;
+                    }
+                } else {
+                    std::cout << "❌ Failed to apply effect to image data" << std::endl;
+                }
+            } else {
+                std::cout << "❌ Failed to read image file: " << filePath << std::endl;
+            }
+        } else {
+            std::cout << "⚠️ No filename provided for current photo" << std::endl;
+        }
+    }
+    
     std::cout << "✅ Effect " << effectName << " applied to MJPEG stream and GPhoto wrapper" << std::endl;
     std::map<std::string, std::string> response;
     response["success"] = "true";

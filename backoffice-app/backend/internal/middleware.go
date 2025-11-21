@@ -1,18 +1,19 @@
 package backend
 
 import (
-    "context"
-    "crypto/hmac"
-    "crypto/sha256"
-    "encoding/base64"
-    "encoding/json"
-    "log"
-    "net"
-    "net/http"
-    "os"
-    "strings"
-    "time"
-    "golang.org/x/time/rate"
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"log"
+	"net"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
+	"golang.org/x/time/rate"
 )
 
 type jsonLogger struct{}
@@ -107,8 +108,14 @@ var ctxSub ctxKey = "sub"
 
 func requireAuth(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Skip authentication for public endpoints
+        if r.URL.Path == "/socket-test" || strings.HasPrefix(r.URL.Path, "/socket.io/") {
+            next.ServeHTTP(w, r)
+            return
+        }
+        
         auth := r.Header.Get("Authorization")
-        if auth == "" || !strings.HasPrefix(auth, "Bearer ") { writeError(w, http.StatusUnauthorized, "unauthorized"); return }
+        if auth == "" || !strings.HasPrefix(auth, "Bearer ") { writeError(w, http.StatusUnauthorized, "unauthorized nur auto kontol"); return }
         tok := strings.TrimPrefix(auth, "Bearer ")
         secret := envString("BACKOFFICE_JWT_SECRET", "dev-secret")
         if tok == "devtoken" && secret == "dev-secret" {

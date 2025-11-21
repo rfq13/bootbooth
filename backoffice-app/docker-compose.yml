@@ -8,12 +8,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: backoffice-backend
-    # Backend binary expose 8080 → dipetakan ke host 3002
-    ports:
-      - "3002:8080"
+    # Gunakan network mode host untuk menghindari masalah iptables
+    network_mode: host
+    # Backend binary jalan langsung di port 3002
     environment:
-      # Alamat internal server (container). Tetap 8080 agar sesuai EXPOSE
-      BACKOFFICE_ADDR: ":8080"
+      # Alamat server langsung ke port 3002 (host mode)
+      BACKOFFICE_ADDR: ":3002"
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5210}
       BACKOFFICE_JWT_SECRET: ${BACKOFFICE_JWT_SECRET:-change-me}
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
@@ -39,12 +39,14 @@ services:
         VITE_WS_URL: ${VITE_WS_URL:-}
         # Catatan: jika memakai SSE, set VITE_SSE_URL dalam Dockerfile bila diperlukan.
     container_name: backoffice-frontend
-    # SSR server expose 8080 → dipetakan ke host 5210
-    ports:
-      - "5210:8080"
+    # Gunakan network mode host untuk menghindari masalah iptables
+    network_mode: host
+    # Frontend server jalan langsung di port 5210
     environment:
       # Runtime env opsional untuk SSR
       NODE_ENV: production
+      # Port untuk frontend server
+      PORT: 5210
     # Sinkronisasi kode (opsional untuk pengembangan)
     volumes:
       - ./frontend:/workspace:ro

@@ -22,6 +22,29 @@ func buildRouter() http.Handler {
     hub := newHub()
     var db = func() *sql.DB { d, _ := NewDB(); return d }()
     booths := newBoothHub(db)
+    
+    // Create a completely separate router for public endpoints (no middleware at all)
+    publicRouter := http.NewServeMux()
+    publicRouter.HandleFunc("/socket-test", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        w.Header().Set("Access-Control-Allow-Origin", "*")
+        w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+        w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        w.Header().Set("Access-Control-Allow-Credentials", "true")
+        w.WriteHeader(200)
+        json.NewEncoder(w).Encode(map[string]string{
+            "message": "Socket.IO server is running",
+            "path": "/socket.io/",
+            "port": "3002",
+            "status": "active",
+        })
+    })
+    
+    // Socket.IO for localbooth
+    socketIOSrv, _ := newSocketIOServer(booths, hub)
+    go socketIOSrv.Serve()
+    publicRouter.Handle("/socket.io/", socketIOSrv)
+    
     // public endpoints
     mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"ok": "true"}) })
     mux.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
@@ -61,12 +84,6 @@ func buildRouter() http.Handler {
             }
         }
     })
-    // Socket.IO for localbooth
-    {
-        srv, _ := newSocketIOServer(booths, hub)
-        go srv.Serve()
-        mux.Handle("/socket.io/", srv)
-    }
     // public API endpoints (no auth required)
     publicMux := http.NewServeMux()
     publicMux.HandleFunc("/api/booth/register", func(w http.ResponseWriter, r *http.Request) {
@@ -178,11 +195,36 @@ func buildRouter() http.Handler {
         v, _ := s.Finish(r.Context(), id)
         writeJSON(w, 200, v)
     })
-    // Mount public API routes without auth
-    mux.Handle("/api/", publicMux)
-    // Mount protected routes with auth
-    mux.Handle("/", requireAuth(requireCSRF(authMux)))
-    return withCORS(withRateLimit(withLogging(mux)))
+    // Handle all other routes with auth middleware
+    protectedHandler := requireAuth(requireCSRF(withCORS(withRateLimit(withLogging(mux)))))
+    
+    // Create a final handler that routes between public and protected
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Handle public routes directly (no middleware)
+        if r.URL.Path == "/socket-test" {
+            w.Header().Set("Content-Type", "application/json")
+            w.Header().Set("Access-Control-Allow-Origin", "*")
+            w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+            w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+            w.Header().Set("Access-Control-Allow-Credentials", "true")
+            w.WriteHeader(200)
+            json.NewEncoder(w).Encode(map[string]string{
+                "message": "Socket.IO server is running",
+                "path": "/socket.io/",
+                "port": "3002",
+                "status": "active",
+            })
+            return
+        }
+        
+        if strings.HasPrefix(r.URL.Path, "/socket.io/") {
+            socketIOSrv.ServeHTTP(w, r)
+            return
+        }
+        
+        // Handle all other routes with auth middleware
+        protectedHandler.ServeHTTP(w, r)
+    })
 }
 
 func hasSuffix(path, suffix string) bool { return len(path) >= len(suffix) && path[len(path)-len(suffix):] == suffix }

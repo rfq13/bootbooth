@@ -616,139 +616,88 @@ void ImageEffects::applyPixelateEffect(ImageData& image) {
     }
 }
 
-// FISHEYE EFFECT - CANON STYLE dengan distorsi kuat dan barrel distortion
 void ImageEffects::applyFishEyeEffect(ImageData& image) {
     const int w = image.width;
     const int h = image.height;
-    
-    // Safety check untuk ukuran gambar
-    if (w <= 0 || h <= 0 || image.data.empty()) {
-        std::cerr << "❌ Invalid image dimensions or empty data" << std::endl;
-        return;
-    }
-    
-    const float cx = w * 0.5f;
-    const float cy = h * 0.5f;
-    const float scaleX = cx;
-    const float scaleY = cy;
-    if (scaleX <= 0.0f || scaleY <= 0.0f) {
-        std::cerr << "❌ Invalid scales" << std::endl;
-        return;
-    }
-    
-    // Parameter fisheye Canon-style (distorsi lebih kuat)
+
     const float intensity = static_cast<float>(params.intensity);
-    const float distortionStrength = (intensity < 0.0f) ? 0.0f : (intensity > 1.0f) ? 1.0f : intensity;
-    // Canon fisheye memiliki vignette yang lebih kuat di pinggir
-    const float vignetteStrength = 0.3f * distortionStrength;
+    float strength = (intensity < 0.0f) ? 0.0f : (intensity > 1.0f) ? 1.0f : intensity;
     
+    if (w <= 0 || h <= 0 || image.data.empty()) return;
+    
+    // Backup original
     std::vector<unsigned char> original = image.data;
-    const size_t dataSize = original.size();
     
-    // Loop utama - PROSES SELURUH GAMBAR dengan distorsi Canon-style
+    // Pusat dan radius lingkaran fisheye (Canon 8mm menghasilkan circular pada full-frame)
+    float cx = w * 0.5f;
+    float cy = h * 0.5f;
+    
+    // Radius maksimum lingkaran gambar (biasanya sedikit lebih kecil dari setengah diagonal)
+    float maxRadius = std::min(cx, cy) * 0.98f;  // hampir penuh tapi tidak sampai tepi
+    
+    // Strength dari 0.0 sampai 1.0 (1.0 = full Canon 8mm look)
+    strength = std::clamp(strength, 0.0f, 1.0f);
+    float fovScale = 1.0f + strength * 1.8f;  // makin besar = makin lebar FoV
+    
     for (int y = 0; y < h; ++y) {
-        const float ny = (y - cy) / scaleY;
-        const float ny2 = ny * ny;
+        float ny = (y - cy) / maxRadius;
+        float ny2 = ny * ny;
         
         for (int x = 0; x < w; ++x) {
-            // Normalisasi koordinat ke [-1, 1] relatif terhadap pusat
-            const float nx = (x - cx) / scaleX;
-            const float nx2 = nx * nx;
+            float nx = (x - cx) / maxRadius;
+            float r = std::sqrt(nx*nx + ny*ny);  // jarak normal dari pusat (0..~1.41)
             
-            // Hitung jarak dari pusat (dari 0 di tengah sampai 1 di sudut)
-            const float r2 = nx2 + ny2;
-            const float r = std::sqrt(r2);
+            int dstIdx = (y * w + x) * 3;
             
-            // Safety check untuk menghindari division by zero
+            // === BAGIAN PALING PENTING: STEREOGRAPHIC PROJECTION (rahasia Canon fisheye) ===
+            float src_r;
             if (r < 1e-6f) {
-                // Di tengah persis, tidak perlu distorsi
+                src_r = 0.0f;
+            } else {
+                // Stereographic: r_dst = 2 * tan(θ/2)  →  θ = 2 * arctan(r_dst / 2)
+                // Kita balik: theta = 2 * arctan(r / (2 * scale)), lalu r_src = tan(theta)
+                float theta = 2.0f * std::atan(r / (2.0f * fovScale));
+                src_r = std::tan(theta);
+            }
+            
+            // Jika di luar lingkaran gambar → hitam total (circular fisheye)
+            if (r > 1.0f) {
+                image.data[dstIdx + 0] = 0;
+                image.data[dstIdx + 1] = 0;
+                image.data[dstIdx + 2] = 0;
                 continue;
             }
             
-            // Canon-style fisheye dengan distorsi lebih kuat
-            // Menggunakan model barrel distortion yang lebih kuat
-            const float k1 = 1.5f * distortionStrength;  // Koefisien barrel distortion primer
-            const float k2 = 0.5f * distortionStrength;  // Koefisien barrel distortion sekunder
-            const float k3 = 0.2f * distortionStrength;  // Koefisien barrel distortion tersier
+            // Hitung koordinat sumber
+            float srcX = cx + nx * src_r * maxRadius;
+            float srcY = cy + ny * src_r * maxRadius;
             
-            // Model distorsi Canon-style: r' = r * (1 + k1*r² + k2*r⁴ + k3*r⁶)
-            const float r4 = r2 * r2;
-            const float r6 = r4 * r2;
-            const float distortionFactor = 1.0f + k1 * r2 + k2 * r4 + k3 * r6;
+            // Clamp ke batas gambar
+            int sx = static_cast<int>(std::clamp(srcX, 0.0f, static_cast<float>(w-1)));
+            int sy = static_cast<int>(std::clamp(srcY, 0.0f, static_cast<float>(h-1)));
             
-            // Semakin jauh dari pusat, semakin kuat distorsi
-            const float srcR = r * distortionFactor;
-            const float factor = srcR / r;
+            int srcIdx = (sy * w + sx) * 3;
             
-            // Koordinat sumber dengan distorsi
-            const float srcX = nx * factor * scaleX + cx;
-            const float srcY = ny * factor * scaleY + cy;
-            
-            // Safety clamp koordinat (pastikan dalam batas gambar)
-            const float clampedSrcX = std::max(0.0f, std::min(srcX, static_cast<float>(w - 1)));
-            const float clampedSrcY = std::max(0.0f, std::min(srcY, static_cast<float>(h - 1)));
-            
-            // Koordinat integer untuk interpolasi
-            const int sx0 = static_cast<int>(clampedSrcX);
-            const int sy0 = static_cast<int>(clampedSrcY);
-            const int sx1 = std::min(sx0 + 1, w - 1);
-            const int sy1 = std::min(sy0 + 1, h - 1);
-            
-            // Faktor interpolasi
-            const float fx = clampedSrcX - sx0;
-            const float fy = clampedSrcY - sy0;
-            
-            // Index untuk interpolasi dengan boundary checks
-            const int idx00 = (sy0 * w + sx0) * 3;
-            const int idx01 = (sy0 * w + sx1) * 3;
-            const int idx10 = (sy1 * w + sx0) * 3;
-            const int idx11 = (sy1 * w + sx1) * 3;
-            
-            const int dstIdx = (y * w + x) * 3;
-            
-            // Safety check untuk destination index
-            if (dstIdx < 0 || dstIdx + 2 >= static_cast<int>(dataSize)) {
-                continue;
-            }
-            
-            // Safety check untuk source indices
-            if (idx00 < 0 || idx00 + 2 >= static_cast<int>(dataSize) ||
-                idx01 < 0 || idx01 + 2 >= static_cast<int>(dataSize) ||
-                idx10 < 0 || idx10 + 2 >= static_cast<int>(dataSize) ||
-                idx11 < 0 || idx11 + 2 >= static_cast<int>(dataSize)) {
-                continue;
-            }
-            
-            // Vignetting effect khas lensa Canon fisheye
-            float vignette = 1.0f;
-            if (vignetteStrength > 0.0f) {
-                // Vignetting yang lebih kuat di pinggir (eksponensial untuk efek lebih natural)
-                const float edgeDistance = r; // 0 di tengah, 1 di sudut
-                vignette = 1.0f - std::pow(edgeDistance, 2.5f) * vignetteStrength;
-                vignette = std::max(0.2f, std::min(1.0f, vignette)); // Batasi minimum vignette
-            }
-            
-            // Interpolasi bilinear untuk semua channel sekaligus
+            // Ambil pixel (bisa diganti bilinear kalau mau lebih halus)
             for (int c = 0; c < 3; ++c) {
-                // Interpolasi bilinear dengan safety checks
-                const float val00 = static_cast<float>(original[idx00 + c]);
-                const float val01 = static_cast<float>(original[idx01 + c]);
-                const float val10 = static_cast<float>(original[idx10 + c]);
-                const float val11 = static_cast<float>(original[idx11 + c]);
+                image.data[dstIdx + c] = original[srcIdx + c];
+            }
+            
+            // === Vignetting super kuat khas Canon fisheye ===
+            float vignette = 1.0f;
+            if (strength > 0.0f) {
+                // Semakin mendekati tepi lingkaran, semakin gelap (power 4–6)
+                float edgeFalloff = 1.0f - r;  // 1 di tengah, 0 di tepi lingkaran
+                vignette = std::pow(edgeFalloff, 4.0f + strength * 3.0f);
+                vignette = std::max(0.0f, vignette);
                 
-                const float interpolated = val00 * (1.0f - fx) * (1.0f - fy) +
-                                        val01 * fx * (1.0f - fy) +
-                                        val10 * (1.0f - fx) * fy +
-                                        val11 * fx * fy;
-                
-                // Hasil akhir dengan clamping dan vignette
-                const float finalVal = interpolated * vignette;
-                image.data[dstIdx + c] = static_cast<unsigned char>(
-                    std::max(0.0f, std::min(255.0f, finalVal))
-                );
+                for (int c = 0; c < 3; ++c) {
+                    float val = image.data[dstIdx + c] * vignette;
+                    image.data[dstIdx + c] = static_cast<unsigned char>(std::clamp(val, 0.0f, 255.0f));
+                }
             }
         }
     }
     
-    std::cout << "✅ Canon-style Fisheye applied (strength=" << distortionStrength << ")" << std::endl;
+    std::cout << "Canon Circular Fisheye (stereographic) applied — mirip EF 8-15mm @8mm" << std::endl;
 }

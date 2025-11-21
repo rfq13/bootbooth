@@ -157,8 +157,8 @@ namespace std {
 }
 
 // Konstanta
-const int API_PORT = 3001;
-const int MJPEG_PORT = 3003;
+const int API_PORT = 3011;
+const int MJPEG_PORT = 3013;
 
 // Struktur untuk kamera
 struct Camera {

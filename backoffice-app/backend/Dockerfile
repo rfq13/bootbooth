@@ -1,7 +1,12 @@
 FROM golang:1.24-alpine AS build
 WORKDIR /src
+# Set GOPROXY to use a more reliable proxy
+ENV GOPROXY=https://goproxy.io,direct
+# Set Go modules to work offline if needed
+ENV GO111MODULE=on
 COPY go.mod .
-RUN go mod download
+# Add timeout and retry options for go mod download
+RUN go mod download -x || go mod download -x || true
 COPY . .
 RUN CGO_ENABLED=0 go build -o /out/server ./cmd/server
 RUN CGO_ENABLED=0 go build -o /out/migrate ./cmd/migrate

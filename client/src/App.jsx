@@ -93,12 +93,17 @@ console.log(
 
 try {
   boSocket = io(BACKOFFICE_SOCKET_URL, {
-    transports: ["polling"],
+    transports: ["polling"], // Gunakan polling saja dulu untuk testing
     path: "/socket.io/",
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
     timeout: 5000,
+    forceNew: true,
+    autoConnect: true,
+    // Tambahkan konfigurasi untuk kompatibilitas dengan server lama
+    upgrade: false,
+    rememberUpgrade: false,
   });
 } catch (error) {
   console.error("Error creating backoffice Socket.IO connection:", error);
@@ -274,6 +279,21 @@ export default function App() {
         case "api-response":
           // Handle API responses if needed
           break;
+        case "photo-effect-applied":
+          // Handle when effect is applied to current photo
+          if (data.success === "true") {
+            console.log("✅ Effect applied to photo:", data.filename);
+
+            // Force refresh the current photo by updating the mjpegBust to trigger a re-render
+            setMjpegBust(Date.now());
+
+            // Show notification
+            notify("success", `Efek ${data.effect} berhasil diterapkan`);
+          } else {
+            console.error("❌ Failed to apply effect to photo");
+            notify("error", "Gagal menerapkan efek pada foto");
+          }
+          break;
         default:
           console.log("⚠️ Unknown WebSocket event:", eventName);
       }
@@ -284,33 +304,66 @@ export default function App() {
       websocket = connectWebSocket(WS_URL);
     }
 
-    // Backoffice Socket.IO connection (unchanged)
+    // Backoffice Socket.IO connection
     if (boSocket) {
       boSocket.on("connect", () => {
         console.log("✅ DEBUG: Backoffice Socket.IO connected successfully!");
         console.log("🔍 DEBUG: Backoffice Socket ID:", boSocket.id);
+
         if (identity && identity.booth_name) {
           const name = identity.booth_name;
           const loc = identity.location || {};
           const location =
             typeof loc === "string" ? loc : `${loc.lat || 0},${loc.lng || 0}`;
           const outletId = "out-1";
+
           console.log("🔍 DEBUG: Emitting backoffice registration:", {
             name,
             location,
             outlet_id: outletId,
           });
-          boSocket.emit("register", { name, location, outlet_id: outletId });
+
+          // Tambahkan timeout untuk registrasi
+          const registrationTimeout = setTimeout(() => {
+            console.error("❌ Registration timeout");
+            notify("error", "Gagal mendaftar ke backoffice");
+          }, 5000);
+
+          boSocket.emit(
+            "register",
+            { name, location, outlet_id: outletId },
+            (response) => {
+              clearTimeout(registrationTimeout);
+              if (response && response.success) {
+                console.log("✅ Registration successful:", response);
+                notify("success", "Berhasil terhubung ke backoffice");
+              } else {
+                console.error("❌ Registration failed:", response);
+                notify("error", "Gagal mendaftar ke backoffice");
+              }
+            }
+          );
         }
       });
+
+      boSocket.on("registered", (data) => {
+        console.log("✅ Registration confirmed:", data);
+        if (data.success) {
+          notify("success", "Berhasil terdaftar di backoffice");
+        }
+      });
+
       boSocket.on("disconnect", (reason) => {
         console.log(
           "❌ DEBUG: Backoffice Socket.IO disconnected. Reason:",
           reason
         );
+        notify("warning", `Koneksi backoffice terputus: ${reason}`);
       });
+
       boSocket.on("connect_error", (error) => {
         console.log("❌ DEBUG: Backoffice Socket.IO connection error:", error);
+        notify("error", `Koneksi backoffice gagal: ${error.message}`);
       });
     }
 
@@ -365,20 +418,31 @@ export default function App() {
     }, 300);
   };
 
-  // Apply effect when changed during preview
+  // Apply effect when changed during preview or when currentPhoto is displayed
   useEffect(() => {
     console.log("APPLYING EFFECT...", {
       effect: currentEffect,
       params: effectParams,
       isPreviewActive,
+      hasCurrentPhoto: !!currentPhoto,
     });
-    if (isPreviewActive) {
-      sendWebSocketEvent("apply-effect", {
+
+    // Send apply-effect event if preview is active OR if we have a current photo
+    if (isPreviewActive || currentPhoto) {
+      const eventData = {
         effect: currentEffect,
         params: effectParams,
-      });
+      };
+
+      // Add current photo information if we're not in preview mode
+      if (!isPreviewActive && currentPhoto) {
+        eventData.currentPhoto = "true";
+        eventData.filename = currentPhoto.filename || currentPhoto.Filename;
+      }
+
+      sendWebSocketEvent("apply-effect", eventData);
     }
-  }, [currentEffect, effectParams, isPreviewActive]);
+  }, [currentEffect, effectParams, isPreviewActive, currentPhoto]);
 
   const handleCapturePhoto = () => {
     if (!cameraConnected || isCapturing) return;
@@ -413,13 +477,26 @@ export default function App() {
   const handleChangeEffectParams = (newParams) => {
     setEffectParams(newParams);
 
-    // If preview is active, also send the updated params to the server
-    console.log("APPLYING EFFECT...", { newParams, isPreviewActive });
-    if (isPreviewActive) {
-      sendWebSocketEvent("apply-effect", {
+    // If preview is active OR if we have a current photo, send the updated params to the server
+    console.log("APPLYING EFFECT...", {
+      newParams,
+      isPreviewActive,
+      hasCurrentPhoto: !!currentPhoto,
+    });
+
+    if (isPreviewActive || currentPhoto) {
+      const eventData = {
         effect: currentEffect,
         params: newParams,
-      });
+      };
+
+      // Add current photo information if we're not in preview mode
+      if (!isPreviewActive && currentPhoto) {
+        eventData.currentPhoto = "true";
+        eventData.filename = currentPhoto.filename || currentPhoto.Filename;
+      }
+
+      sendWebSocketEvent("apply-effect", eventData);
     }
   };
 
