@@ -92,15 +92,18 @@ console.log(
 );
 
 try {
+  console.log({ BACKOFFICE_SOCKET_URL });
   boSocket = io(BACKOFFICE_SOCKET_URL, {
-    transports: ["websocket", "polling"], // Coba websocket dulu, fallback ke polling
+    transports: ["polling"],
+    upgrade: false,
+    rememberUpgrade: false,
     path: "/socket.io/",
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
     timeout: 5000,
     forceNew: true,
-    autoConnect: true,
+    autoConnect: false,
   });
 } catch (error) {
   console.error("Error creating backoffice Socket.IO connection:", error);
@@ -303,65 +306,53 @@ export default function App() {
 
     // Backoffice Socket.IO connection
     if (boSocket) {
-      boSocket.on("connect", () => {
-        console.log("✅ DEBUG: Backoffice Socket.IO connected successfully!");
-        console.log("🔍 DEBUG: Backoffice Socket ID:", boSocket.id);
-
-        if (identity && identity.booth_name) {
-          const name = identity.booth_name;
-          const loc = identity.location || {};
-          const location =
-            typeof loc === "string" ? loc : `${loc.lat || 0},${loc.lng || 0}`;
-          const outletId = "out-1";
-
-          console.log("🔍 DEBUG: Emitting backoffice registration:", {
-            name,
-            location,
-            outlet_id: outletId,
-          });
-
-          // Tambahkan timeout untuk registrasi
-          const registrationTimeout = setTimeout(() => {
-            console.error("❌ Registration timeout");
+      const doRegister = () => {
+        if (!identity || !identity.booth_name) return;
+        const name = identity.booth_name;
+        const loc = identity.location || {};
+        const location = typeof loc === "string" ? loc : `${loc.lat || 0},${loc.lng || 0}`;
+        const outletId = "out-1";
+        const registrationTimeout = setTimeout(() => {
+          notify("error", "Gagal mendaftar ke backoffice");
+        }, 5000);
+        boSocket.emit("register", { name, location, outlet_id: outletId }, (response) => {
+          clearTimeout(registrationTimeout);
+          if (response && response.success) {
+            notify("success", "Berhasil terhubung ke backoffice");
+          } else {
             notify("error", "Gagal mendaftar ke backoffice");
-          }, 5000);
+          }
+        });
+      };
 
-          boSocket.emit(
-            "register",
-            { name, location, outlet_id: outletId },
-            (response) => {
-              clearTimeout(registrationTimeout);
-              if (response && response.success) {
-                console.log("✅ Registration successful:", response);
-                notify("success", "Berhasil terhubung ke backoffice");
-              } else {
-                console.error("❌ Registration failed:", response);
-                notify("error", "Gagal mendaftar ke backoffice");
-              }
-            }
-          );
-        }
+      boSocket.off("connect");
+      boSocket.off("registered");
+      boSocket.off("disconnect");
+      boSocket.off("connect_error");
+
+      boSocket.on("connect", () => {
+        doRegister();
       });
 
       boSocket.on("registered", (data) => {
-        console.log("✅ Registration confirmed:", data);
         if (data.success) {
           notify("success", "Berhasil terdaftar di backoffice");
         }
       });
 
       boSocket.on("disconnect", (reason) => {
-        console.log(
-          "❌ DEBUG: Backoffice Socket.IO disconnected. Reason:",
-          reason
-        );
         notify("warning", `Koneksi backoffice terputus: ${reason}`);
       });
 
       boSocket.on("connect_error", (error) => {
-        console.log("❌ DEBUG: Backoffice Socket.IO connection error:", error);
         notify("error", `Koneksi backoffice gagal: ${error.message}`);
       });
+
+      if (boSocket.connected) {
+        doRegister();
+      } else {
+        boSocket.connect();
+      }
     }
 
     return () => {

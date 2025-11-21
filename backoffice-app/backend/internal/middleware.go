@@ -53,19 +53,26 @@ func withRateLimit(next http.Handler) http.Handler {
 
 func withCORS(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        origin := os.Getenv("FRONTEND_ORIGIN")
+        origins := os.Getenv("FRONTEND_ORIGIN")
+        originList := strings.Split(origins, ",")
+        origin := "*"
+        if len(originList) == 1 && originList[0] != "" {
+            origin = originList[0]
+        } else if len(originList) > 1 {
+            reqOrigin := r.Header.Get("Origin")
+            for _, o := range originList {
+                if strings.TrimSpace(o) == reqOrigin {
+                    origin = reqOrigin
+                    break
+                }
+            }
+        }
         if origin == "" { origin = "*" }
         w.Header().Set("Access-Control-Allow-Origin", origin)
         w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-        w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        w.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-CSRF-Token")
         w.Header().Set("Access-Control-Allow-Credentials", "true")
-        // skip CORS processing untuk socket.io karena engine.io handle sendiri
-        if strings.HasPrefix(r.URL.Path, "/socket.io/") {
-            next.ServeHTTP(w, r)
-            return
-        }
-
-        // normal OPTIONS handler untuk selain socket.io
+        // normal OPTIONS handler
         if r.Method == http.MethodOptions {
             w.WriteHeader(http.StatusNoContent)
             return

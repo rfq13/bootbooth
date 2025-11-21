@@ -33,5 +33,5 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Content-Type', 'text/html')
   res.end(html)
 })
-
-server.listen(8080)
+const port = Number(process.env.PORT || 5210)
+server.listen(port)

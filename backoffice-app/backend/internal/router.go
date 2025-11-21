@@ -110,6 +110,7 @@ func buildRouter() http.Handler {
         identity := map[string]any{"id": id, "booth_name": name, "location": map[string]any{"lat": lat, "lng": lng}, "created_at": createdAt}
         writeJSON(w, 200, map[string]any{"success": true, "data": identity})
     })
+    publicHandler := withCORS(withRateLimit(withLogging(publicMux)))
     // protected endpoints
     authMux := http.NewServeMux()
     authMux.HandleFunc("/session/", func(w http.ResponseWriter, r *http.Request) {
@@ -227,11 +228,15 @@ func buildRouter() http.Handler {
         }
         
         if strings.HasPrefix(r.URL.Path, "/socket.io/") {
-            // Socket.IO server menangani header sendiri, jadi kita langsung serve saja
-            socketIOSrv.ServeHTTP(w, r)
+            withCORS(socketIOSrv).ServeHTTP(w, r)
             return
         }
         
+        // Route public endpoints
+        if r.URL.Path == "/api/booth/register" {
+            publicHandler.ServeHTTP(w, r)
+            return
+        }
         // Handle all other routes with auth middleware
         protectedHandler.ServeHTTP(w, r)
     })

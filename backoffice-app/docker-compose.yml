@@ -8,13 +8,13 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: backoffice-backend
-    # Gunakan network mode host untuk menghindari masalah iptables
-    network_mode: host
+    ports:
+      - "3002:3002"
     # Backend binary jalan langsung di port 3002
     environment:
       # Alamat server langsung ke port 3002 (host mode)
       BACKOFFICE_ADDR: ":3002"
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5210}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5210,http://localhost:5173}
       BACKOFFICE_JWT_SECRET: ${BACKOFFICE_JWT_SECRET:-change-me}
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
       BACKOFFICE_TLS_CERT: ${BACKOFFICE_TLS_CERT:-}
@@ -39,8 +39,8 @@ services:
         VITE_WS_URL: ${VITE_WS_URL:-}
         # Catatan: jika memakai SSE, set VITE_SSE_URL dalam Dockerfile bila diperlukan.
     container_name: backoffice-frontend
-    # Gunakan network mode host untuk menghindari masalah iptables
-    network_mode: host
+    ports:
+      - "5210:5210"
     # Frontend server jalan langsung di port 5210
     environment:
       # Runtime env opsional untuk SSR

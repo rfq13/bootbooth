@@ -1,11 +1,11 @@
 package backend
 
 import (
-	"fmt"
-	"strings"
-	"time"
+    "fmt"
+    "strings"
+    "time"
 
-	socketio "github.com/googollee/go-socket.io"
+    socketio "github.com/googollee/go-socket.io"
 )
 
 type boothRegister struct { Name string `json:"name"`; Location string `json:"location"`; OutletID string `json:"outlet_id"` }
