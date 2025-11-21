@@ -22,7 +22,11 @@ export default function BoothRegistration({ onRegistered }) {
       },
       () => {}
     );
-    return () => { try { navigator.geolocation.clearWatch(id); } catch (_) {} };
+    return () => {
+      try {
+        navigator.geolocation.clearWatch(id);
+      } catch (_) {}
+    };
   }, []);
 
   const sanitize = (s) => s.replace(/[^a-zA-Z0-9 \-_.]/g, "").trim();
@@ -54,15 +58,43 @@ export default function BoothRegistration({ onRegistered }) {
     e.preventDefault();
     setError("");
     const n = sanitize(name);
-    if (n.length < 3 || n.length > 50) { setError("Nama tidak valid"); return; }
-    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) { setError("Lokasi tidak valid"); return; }
+    if (n.length < 3 || n.length > 50) {
+      setError("Nama tidak valid");
+      return;
+    }
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      setError("Lokasi tidak valid");
+      return;
+    }
     setLoading(true);
     try {
-      const reg = await postWithTimeout("http://localhost:3002/api/booth/register", { booth_name: n, location: { lat, lng } }, 10000, 3);
-      if (!reg.success) { setError(reg.error || "Registrasi gagal"); setLoading(false); return; }
+      const reg = await postWithTimeout(
+        "http://localhost:3002/api/booth/register",
+        { booth_name: n, location: { lat, lng } },
+        10000,
+        3
+      );
+      if (!reg.success) {
+        setError(reg.error || "Registrasi gagal");
+        setLoading(false);
+        return;
+      }
       const identity = reg.data;
-      const fw = await postWithTimeout(`${API_URL}/api/identity`, { booth_name: identity.booth_name, location: identity.location, encrypted_data: identity.encrypted_data || "" }, 10000, 3);
-      if (!fw.success) { setError("Gagal menyimpan identity"); setLoading(false); return; }
+      const fw = await postWithTimeout(
+        `${API_URL}/api/identity`,
+        {
+          booth_name: identity.booth_name,
+          location: identity.location,
+          encrypted_data: identity.encrypted_data || "",
+        },
+        10000,
+        3
+      );
+      if (!fw.success) {
+        setError("Gagal menyimpan identity");
+        setLoading(false);
+        return;
+      }
       onRegistered(identity);
     } catch (err) {
       setError("Gagal koneksi API");
@@ -73,22 +105,44 @@ export default function BoothRegistration({ onRegistered }) {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-8">
-      <form onSubmit={submit} className="w-full max-w-md bg-white rounded-xl shadow p-6 space-y-4">
+      <form
+        onSubmit={submit}
+        className="w-full max-w-md bg-white rounded-xl shadow p-6 space-y-4"
+      >
         <h2 className="text-xl font-semibold">Registrasi Booth</h2>
         <label className="block text-sm">Nama Booth</label>
-        <input className="w-full border rounded px-3 py-2" value={name} onInput={(e) => setName(e.target.value)} placeholder="Nama" />
+        <input
+          className="w-full border rounded px-3 py-2"
+          value={name}
+          onInput={(e) => setName(e.target.value)}
+          placeholder="Nama"
+        />
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm">Latitude</label>
-            <input className="w-full border rounded px-3 py-2" type="number" step="0.000001" value={lat} onInput={(e) => setLat(parseFloat(e.target.value || "0"))} />
+            <input
+              className="w-full border rounded px-3 py-2"
+              value={lat}
+              onInput={(e) => setLat(parseFloat(e.target.value || "0"))}
+            />
           </div>
           <div>
             <label className="block text-sm">Longitude</label>
-            <input className="w-full border rounded px-3 py-2" type="number" step="0.000001" value={lng} onInput={(e) => setLng(parseFloat(e.target.value || "0"))} />
+            <input
+              className="w-full border rounded px-3 py-2"
+              value={lng}
+              onInput={(e) => setLng(parseFloat(e.target.value || "0"))}
+            />
           </div>
         </div>
         {error && <div className="text-red-600 text-sm">{error}</div>}
-        <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white rounded px-4 py-2">{loading ? "Mendaftar..." : "Daftar"}</button>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-blue-600 text-white rounded px-4 py-2"
+        >
+          {loading ? "Mendaftar..." : "Daftar"}
+        </button>
       </form>
     </div>
   );
