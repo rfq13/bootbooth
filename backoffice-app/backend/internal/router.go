@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -41,9 +42,17 @@ func buildRouter() http.Handler {
     })
     
     // Socket.IO for localbooth
-    socketIOSrv, _ := newSocketIOServer(booths, hub)
-    go socketIOSrv.Serve()
-    publicRouter.Handle("/socket.io/", socketIOSrv)
+    socketIOSrv, err := newSocketIOServer(booths, hub)
+    if err != nil {
+        fmt.Printf("Error creating Socket.IO server: %v\n", err)
+    } else {
+        go func() {
+            if err := socketIOSrv.Serve(); err != nil {
+                fmt.Printf("Error serving Socket.IO: %v\n", err)
+            }
+        }()
+        publicRouter.Handle("/socket.io/", socketIOSrv)
+    }
     
     // public endpoints
     mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"ok": "true"}) })
@@ -218,6 +227,7 @@ func buildRouter() http.Handler {
         }
         
         if strings.HasPrefix(r.URL.Path, "/socket.io/") {
+            // Socket.IO server menangani header sendiri, jadi kita langsung serve saja
             socketIOSrv.ServeHTTP(w, r)
             return
         }

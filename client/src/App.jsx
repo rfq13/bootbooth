@@ -93,7 +93,7 @@ console.log(
 
 try {
   boSocket = io(BACKOFFICE_SOCKET_URL, {
-    transports: ["polling"], // Gunakan polling saja dulu untuk testing
+    transports: ["websocket", "polling"], // Coba websocket dulu, fallback ke polling
     path: "/socket.io/",
     reconnection: true,
     reconnectionAttempts: 5,
@@ -101,9 +101,6 @@ try {
     timeout: 5000,
     forceNew: true,
     autoConnect: true,
-    // Tambahkan konfigurasi untuk kompatibilitas dengan server lama
-    upgrade: false,
-    rememberUpgrade: false,
   });
 } catch (error) {
   console.error("Error creating backoffice Socket.IO connection:", error);
