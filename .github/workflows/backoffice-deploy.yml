@@ -16,8 +16,6 @@ on:
           - production
 
 env:
-  REGISTRY: docker.io
-  IMAGE_NAME: rfq13/bootbooth
   DOMAIN: pijarrupa.com
   API_DOMAIN: api.pijarrupa.com
 
@@ -62,52 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backoffice-app/backend
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backoffice-app/frontend
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VITE_API_BASE_URL=https://${{ env.API_DOMAIN }}
-            VITE_SSE_URL=https://${{ env.API_DOMAIN }}/events
-            VITE_WS_URL=
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Deploy to Production
+      - name: Deploy to Production (Build Direct)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DO_HOST }}
@@ -127,14 +80,16 @@ jobs:
             # Parse backend environment from secrets
             echo '${{ secrets.BACKEND_ENV }}' > .env.backend
 
-            # Parse frontend environment from secrets
+            # Parse frontend environment from secrets  
             echo '${{ secrets.FRONTEND_ENV }}' > .env.frontend
 
-            # Create new compose file with updated image tags
+            # Create new compose file with build context
             cat > docker-compose.yml << 'EOF'
             services:
               backend:
-                image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ steps.meta.outputs.tags }}
+                build:
+                  context: ./backoffice-app/backend
+                  dockerfile: Dockerfile
                 container_name: backoffice-backend
                 ports:
                   - "3002:3002"
@@ -149,7 +104,13 @@ jobs:
                   start_period: 10s
                 
               frontend:
-                image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ steps.meta.outputs.tags }}
+                build:
+                  context: ./backoffice-app/frontend
+                  dockerfile: Dockerfile
+                  args:
+                    VITE_API_BASE_URL: https://api.pijarrupa.com
+                    VITE_SSE_URL: https://api.pijarrupa.com/events
+                    VITE_WS_URL: ""
                 container_name: backoffice-frontend
                 ports:
                   - "5210:5210"
@@ -169,13 +130,18 @@ jobs:
                   start_period: 10s
             EOF
 
-            # Pull new images
-            docker compose pull
+            # Clone latest source code
+            if [ -d "backoffice-app" ]; then
+              rm -rf backoffice-app
+            fi
+            git clone https://github.com/rfq13/bootbooth.git backoffice-app
+            cd backoffice-app
+            git checkout main
 
-            # Stop old containers
+            # Build and deploy
+            cd /home/deploy/backoffice-app
+            docker compose build
             docker compose down
-
-            # Start new containers
             docker compose up -d
 
             # Wait for services to be healthy
@@ -194,7 +160,7 @@ jobs:
             echo "Production deployment completed successfully!"
 
             # Log deployment info
-            echo "$(date): Deployed ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} with tag ${{ steps.meta.outputs.tags }}" >> logs/deploy.log
+            echo "$(date): Deployed from source code" >> logs/deploy.log
 
   build-and-deploy-staging:
     needs: test
@@ -204,51 +170,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=staging,enable={{is_default_branch}}
-
-      - name: Build and push backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backoffice-app/backend
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backoffice-app/frontend
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VITE_API_BASE_URL=https://staging.${{ env.API_DOMAIN }}
-            VITE_SSE_URL=https://staging.${{ env.API_DOMAIN }}/events
-            VITE_WS_URL=
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Deploy to Staging
+      - name: Deploy to Staging (Build Direct)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DO_HOST }}
@@ -264,11 +186,13 @@ jobs:
             echo '${{ secrets.STAGING_BACKEND_ENV }}' > .env.backend
             echo '${{ secrets.STAGING_FRONTEND_ENV }}' > .env.frontend
 
-            # Create staging compose file
+            # Create staging compose file with build context
             cat > docker-compose.yml << 'EOF'
             services:
               backend:
-                image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ steps.meta.outputs.tags }}
+                build:
+                  context: ./backoffice-app/backend
+                  dockerfile: Dockerfile
                 container_name: backoffice-backend-staging
                 ports:
                   - "3003:3002"
@@ -283,7 +207,13 @@ jobs:
                   start_period: 10s
                 
               frontend:
-                image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ steps.meta.outputs.tags }}
+                build:
+                  context: ./backoffice-app/frontend
+                  dockerfile: Dockerfile
+                  args:
+                    VITE_API_BASE_URL: https://staging.api.pijarrupa.com
+                    VITE_SSE_URL: https://staging.api.pijarrupa.com/events
+                    VITE_WS_URL: ""
                 container_name: backoffice-frontend-staging
                 ports:
                   - "5211:5210"
@@ -303,8 +233,17 @@ jobs:
                   start_period: 10s
             EOF
 
-            # Deploy to staging
-            docker compose pull
+            # Clone latest source code
+            if [ -d "backoffice-app" ]; then
+              rm -rf backoffice-app
+            fi
+            git clone https://github.com/rfq13/bootbooth.git backoffice-app
+            cd backoffice-app
+            git checkout develop
+
+            # Build and deploy to staging
+            cd /home/deploy/backoffice-app-staging
+            docker compose build
             docker compose down
             docker compose up -d
 
