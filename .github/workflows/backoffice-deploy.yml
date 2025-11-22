@@ -16,8 +16,8 @@ on:
           - production
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  REGISTRY: docker.io
+  IMAGE_NAME: rfq13/bootbooth
   DOMAIN: pijarrupa.com
   API_DOMAIN: api.pijarrupa.com
 
