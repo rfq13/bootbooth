@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS system_config;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS bookings;
+DROP TABLE IF EXISTS admin_users;
+DROP TABLE IF EXISTS outlets;

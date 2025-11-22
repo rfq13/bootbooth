@@ -1,0 +1,53 @@
+name: Backoffice Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images
+        run: |
+          docker build -t backoffice-backend:latest backoffice-app/backend
+          docker build -t backoffice-frontend:latest backoffice-app/frontend
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          source: "backoffice-app/docker-compose.yml"
+          target: "~/apps/backoffice"
+      - name: Write env files on server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            mkdir -p ~/apps/backoffice
+            cat > ~/apps/backoffice/.env << 'EOF'
+            ${BACKEND_ENV}
+            EOF
+            cat > ~/apps/backoffice/frontend.env << 'EOF'
+            ${FRONTEND_ENV}
+            EOF
+      - name: Compose up
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            cd ~/apps/backoffice
+            docker compose --env-file ./.env -f docker-compose.yml up -d

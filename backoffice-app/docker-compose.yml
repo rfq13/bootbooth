@@ -1,0 +1,59 @@
+# Compose untuk Backoffice (Frontend + Backend)
+# Jalankan: docker-compose up -d
+
+services:
+  backend:
+    # Build dari Dockerfile Golang (distroless runner)
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backoffice-backend
+    ports:
+      - "3002:3002"
+    # Backend binary jalan langsung di port 3002
+    environment:
+      # Alamat server langsung ke port 3002 (host mode)
+      BACKOFFICE_ADDR: ":3002"
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5210,http://localhost:5173}
+      BACKOFFICE_JWT_SECRET: ${BACKOFFICE_JWT_SECRET:-change-me}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
+      BACKOFFICE_TLS_CERT: ${BACKOFFICE_TLS_CERT:-}
+      BACKOFFICE_TLS_KEY: ${BACKOFFICE_TLS_KEY:-}
+      # Config eksternal (disiapkan di env host, tidak ada image redis/postgres di compose ini)
+      REDIS_URL: ${REDIS_URL:-}
+      DATABASE_URL: ${DATABASE_URL:-}
+    # Sinkronisasi kode (opsional untuk pengembangan). Distroless tidak memanfaatkan ini saat runtime.
+    volumes:
+      - ./backend:/workspace:ro
+    # Healthcheck bawaan binary (lihat Dockerfile). Tambahkan restart policy ringan.
+    restart: unless-stopped
+
+  frontend:
+    # Build SSR Node dari Dockerfile Frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Build-time env untuk Vite
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3002}
+        VITE_WS_URL: ${VITE_WS_URL:-}
+        # Catatan: jika memakai SSE, set VITE_SSE_URL dalam Dockerfile bila diperlukan.
+    container_name: backoffice-frontend
+    ports:
+      - "5210:5210"
+    # Frontend server jalan langsung di port 5210
+    environment:
+      # Runtime env opsional untuk SSR
+      NODE_ENV: production
+      # Port untuk frontend server
+      PORT: 5210
+    # Sinkronisasi kode (opsional untuk pengembangan)
+    volumes:
+      - ./frontend:/workspace:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+# Tips:
+# - Siapkan file .env di root repo atau variable environment host untuk mengisi nilai di atas.
+# - REDIS_URL dan DATABASE_URL dikonsumsi aplikasi jika diaktifkan; layanan database tidak dijalankan di compose ini.
+# - Verifikasi: buka http://localhost:3002/healthz dan http://localhost:5210/ untuk memastikan kedua service berjalan.
