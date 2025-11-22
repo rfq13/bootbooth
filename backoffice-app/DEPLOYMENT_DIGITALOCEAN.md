@@ -178,8 +178,8 @@ BACKOFFICE_JWT_SECRET=your-super-secret-jwt-key-here
 PAYMENT_WEBHOOK_SECRET=your-webhook-secret
 BACKOFFICE_TLS_CERT=
 BACKOFFICE_TLS_KEY=
-DATABASE_URL=postgresql://postgres.fmpwdnolddqimaiiitit:jiiancoK123@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres
-REDIS_URL=redis://default:AZbPAAIncDI1NjExNzc5NGQ0ZTA0NmViYjdkZTVlYWMxYTNjYWUwYnAyMzg2MDc@actual-sheep-38607.upstash.io:6379
+DATABASE_URL=
+REDIS_URL=
 BACKOFFICE_SHUTDOWN_TIMEOUT=10s
 BACKOFFICE_READ_TIMEOUT=5s
 BACKOFFICE_WRITE_TIMEOUT=10s
@@ -393,7 +393,15 @@ scp backoffice-app/scripts/rollback.sh root@YOUR_SERVER_IP:/root/
 
 # Di server:
 chmod +x setup-server.sh rollback.sh
-./setup-server.sh
+
+# JALANKAN SEBAGAI ROOT (jika perlu):
+./setup-server.sh --force-root
+
+# ATAU BUAT USER DEPLOY TERLEBIH DAHULU:
+# adduser --disabled-password --gecos '' deploy
+# usermod -aG sudo deploy
+# su - deploy
+# /root/setup-server.sh
 
 # METODE 2: Copy-paste manual
 # SSH ke server, buat file setup-server.sh dan rollback.sh dengan nano

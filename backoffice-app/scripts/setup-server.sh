@@ -26,11 +26,21 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Check if running as root
-if [[ $EUID -eq 0 ]]; then
-   print_error "This script should not be run as root!"
-   echo "Please run as a regular user with sudo privileges."
-   exit 1
+# Check for force root flag first
+if [[ "$1" == "--force-root" ]]; then
+   print_warning "Running as root with --force-root flag"
+   print_warning "This is not recommended for production"
+else
+   # Check if running as root
+   if [[ $EUID -eq 0 ]]; then
+      print_error "This script should not be run as root!"
+      echo "Please run as a regular user with sudo privileges."
+      echo ""
+      echo "If you want to run as root, use:"
+      echo "  ./setup-server.sh --force-root"
+      echo ""
+      exit 1
+   fi
 fi
 
 # Update system
