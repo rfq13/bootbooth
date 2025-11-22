@@ -1,249 +1,496 @@
 // Komponen landing terpisah dari admin, tidak menggunakan UI dari admin
-import { Camera, Zap, ShieldCheck, Users, Star } from "lucide-react";
 import { useEffect } from "react";
 
 export default function Landing() {
   useEffect(() => {
-    const els = Array.from(document.querySelectorAll<HTMLElement>(".reveal"));
-    let gsapRef: any = null;
-    const init = async () => {
-      try {
-        const mod = await import("gsap");
-        const st = await import("gsap/ScrollTrigger");
-        gsapRef = (mod as any).gsap || mod;
-        const ScrollTrigger = (st as any).ScrollTrigger || (st as any).default;
-        if (gsapRef && ScrollTrigger) { (gsapRef as any).registerPlugin(ScrollTrigger) }
-      } catch { gsapRef = null }
-      const io = new IntersectionObserver(entries => {
-        entries.forEach(e => {
-          if (e.isIntersecting) {
-            if (gsapRef) { (gsapRef as any).to(e.target, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }) }
-            else { e.target.classList.add("reveal-visible") }
-            io.unobserve(e.target);
-          }
-        });
-      }, { threshold: 0.15 });
-      els.forEach(el => io.observe(el));
-      const btns = Array.from(document.querySelectorAll<HTMLElement>(".btn-gradient"));
-      btns.forEach(b => {
-        b.addEventListener("mouseenter", () => { if (gsapRef) { (gsapRef as any).to(b, { scale: 1.03, duration: 0.2, ease: "power2.out" }) } });
-        b.addEventListener("mouseleave", () => { if (gsapRef) { (gsapRef as any).to(b, { scale: 1.0, duration: 0.2, ease: "power2.out" }) } });
-      });
-      const icons = Array.from(document.querySelectorAll<HTMLElement>(".icon-anim"));
-      icons.forEach(i => {
-        i.addEventListener("mouseenter", () => { if (gsapRef) { (gsapRef as any).to(i, { scale: 1.05, duration: 0.25, ease: "elastic.out(1, 0.6)" }) } });
-        i.addEventListener("mouseleave", () => { if (gsapRef) { (gsapRef as any).to(i, { scale: 1.0, duration: 0.2, ease: "power2.out" }) } });
-      });
-      const cards = Array.from(document.querySelectorAll<HTMLElement>(".card-anim"));
-      cards.forEach(c => {
-        c.addEventListener("mouseenter", () => { if (gsapRef) { (gsapRef as any).to(c, { y: -5, duration: 0.2, ease: "power2.out" }) } });
-        c.addEventListener("mouseleave", () => { if (gsapRef) { (gsapRef as any).to(c, { y: 0, duration: 0.2, ease: "power2.out" }) } });
-      });
-      if (gsapRef && (gsapRef as any).ScrollTrigger) {
-        const hero = document.querySelector<HTMLElement>("figure[aria-label='Ilustrasi layanan']");
-        if (hero) {
-          (gsapRef as any).to(hero, {
-            yPercent: -20,
-            ease: "none",
-            scrollTrigger: { trigger: hero, start: "top 75%", end: "bottom 25%", scrub: true },
-          });
+    // Smooth scroll untuk anchor links
+    const handleAnchorClick = (e: Event) => {
+      const target = e.target as HTMLAnchorElement;
+      if (target.hash) {
+        e.preventDefault();
+        const element = document.querySelector(target.hash);
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth" });
         }
-        const sections = [
-          { sel: "#features", start: "top 75%" },
-          { sel: "#testimonials", start: "top 50%" },
-          { sel: "#cta-heading", start: "top 25%" },
-        ];
-        sections.forEach(s => {
-          const el = document.querySelector<HTMLElement>(s.sel);
-          if (el) {
-            (gsapRef as any).fromTo(el, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.8, ease: "power2.out", scrollTrigger: { trigger: el, start: s.start, toggleActions: "play none none reverse" } });
-          }
-        });
       }
     };
-    init();
-    return () => {};
+
+    // Tambahkan event listener untuk semua anchor links
+    const anchorLinks = document.querySelectorAll('a[href^="#"]');
+    anchorLinks.forEach((link) => {
+      link.addEventListener("click", handleAnchorClick);
+    });
+
+    return () => {
+      anchorLinks.forEach((link) => {
+        link.removeEventListener("click", handleAnchorClick);
+      });
+    };
   }, []);
+
   return (
-    <div className="landing-wrap min-h-screen relative">
-      <div className="landing-glow" />
-      <main id="home" className="mx-auto max-w-6xl px-4">
-      {/* Hero */}
-      <section
-        className="py-12 md:py-20 grid md:grid-cols-2 gap-8 items-center"
-        aria-labelledby="hero-heading"
-      >
-        <div className="animate-[floatY_8s_ease-in-out_infinite] reveal">
-          <h1
-            id="hero-heading"
-            className="text-4xl md:text-5xl font-bold leading-tight text-gradient"
-          >
-            Kelola Booth Foto Anda Secara Real‑Time
-          </h1>
-          <p className="mt-3 text-[#6b7280]">
-            Booking, pembayaran, dan sesi operasional dalam satu sistem yang
-            cepat, aman, dan dapat diandalkan.
-          </p>
-          <div className="mt-6 flex gap-3">
+    <>
+      <style>
+        {`
+          @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+          }
+          
+          .no-underline {
+            text-decoration: none;
+          }
+          
+          .list-none {
+            list-style: none;
+          }
+        `}
+      </style>
+      <div className="min-h-screen bg-[#FDF8F3]">
+        {/* Navigation */}
+        <nav className="fixed top-0 w-full bg-[rgba(253,248,243,0.95)] backdrop-blur-lg px-8 py-4 z-50 shadow-[0_2px_20px_rgba(155,122,91,0.1)]">
+          <div className="max-w-6xl mx-auto flex justify-between items-center">
+            <div className="flex items-center gap-2 text-2xl font-bold text-[#1a1917]">
+              <i className="fas fa-camera-retro text-[#B3916F]"></i>
+              Photobooth
+            </div>
+            <ul className="flex gap-8 list-none">
+              <li>
+                <a
+                  href="#features"
+                  className="no-underline text-[#6d6354] font-medium hover:text-[#9B7A5B] transition-colors"
+                >
+                  Fitur
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#how-it-works"
+                  className="no-underline text-[#6d6354] font-medium hover:text-[#9B7A5B] transition-colors"
+                >
+                  Cara Kerja
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#pricing"
+                  className="no-underline text-[#6d6354] font-medium hover:text-[#9B7A5B] transition-colors"
+                >
+                  Harga
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#contact"
+                  className="no-underline text-[#6d6354] font-medium hover:text-[#9B7A5B] transition-colors"
+                >
+                  Kontak
+                </a>
+              </li>
+            </ul>
             <a
               href="/login"
-              className="inline-flex h-10 px-5 items-center rounded-md btn-gradient text-sm"
+              className="bg-gradient-to-r from-[#C5A888] to-[#9B7A5B] text-white px-6 py-3 rounded-full no-underline font-semibold hover:transform hover:translate-y-[-2px] hover:shadow-[0_10px_30px_rgba(155,122,91,0.3)] transition-all inline-block"
             >
-              Masuk Backoffice
-            </a>
-            <a
-              href="#features"
-              className="inline-flex h-10 px-5 items-center rounded-md bg-white/80 text-[#111827] text-sm hover:bg-white card-soft"
-            >
-              Lihat Fitur
+              Coba Gratis
             </a>
           </div>
-        </div>
-        <figure
-          className="relative w-full h-64 md:h-80 rounded-lg overflow-hidden shadow-card animate-[floatY_10s_ease-in-out_infinite] reveal"
-          aria-label="Ilustrasi layanan"
+        </nav>
+
+        {/* Hero Section */}
+        <section className="min-h-screen flex items-center px-8 pt-24 pb-16 bg-gradient-to-br from-[#FDF8F3] via-[#FAF1E7] to-[#F3E5D3] relative overflow-hidden">
+          <div
+            className="absolute top-[-50%] right-[-20%] w-4/5 h-[150%] opacity-50"
+            style={{
+              background:
+                "radial-gradient(ellipse, rgba(237,217,192,0.5) 0%, transparent 70%)",
+            }}
+          ></div>
+          <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-16 items-center relative z-10">
+            <div>
+              <h1 className="text-5xl md:text-6xl font-extrabold text-[#1a1917] leading-tight mb-6">
+                Digitize Your{" "}
+                <span className="bg-gradient-to-r from-[#C5A888] to-[#9B7A5B] bg-clip-text text-transparent">
+                  Photobooth
+                </span>{" "}
+                Experience
+              </h1>
+              <p className="text-xl text-[#6d6354] mb-8">
+                Solusi photobooth modern dengan live preview, efek instan, dan
+                kemudahan capture. Sempurna untuk menciptakan momen berkesan
+                dengan gaya.
+              </p>
+              <div className="flex gap-4 flex-wrap">
+                <a
+                  href="#"
+                  className="bg-gradient-to-r from-[#C5A888] to-[#9B7A5B] text-white px-6 py-3 rounded-full no-underline font-semibold hover:transform hover:translate-y-[-2px] hover:shadow-[0_10px_30px_rgba(155,122,91,0.3)] transition-all inline-block"
+                >
+                  Mulai Sekarang <i className="fas fa-arrow-right ml-2"></i>
+                </a>
+                <a
+                  href="#"
+                  className="bg-white text-[#1a1917] px-6 py-3 rounded-full no-underline font-semibold border-2 border-[#EAD0B3] hover:bg-[#FAF1E7] hover:border-[#D6BFA1] transition-all inline-block"
+                >
+                  <i className="fas fa-play mr-2"></i> Lihat Demo
+                </a>
+              </div>
+            </div>
+            <div className="relative">
+              <div
+                className="bg-white rounded-2xl p-6 shadow-[0_30px_60px_rgba(155,122,91,0.2)]"
+                style={{
+                  perspective: "1000px",
+                  transform: "perspective(1000px) rotateY(-5deg)",
+                  animation: "float 6s ease-in-out infinite",
+                }}
+              >
+                <div className="flex gap-2 mb-4">
+                  <div className="w-3 h-3 rounded-full bg-[#ff5f57]"></div>
+                  <div className="w-3 h-3 rounded-full bg-[#febc2e]"></div>
+                  <div className="w-3 h-3 rounded-full bg-[#28c840]"></div>
+                </div>
+                <div className="bg-[#FAF1E7] rounded-xl p-8 text-center">
+                  <div className="w-16 h-16 bg-[#EDD9C0] rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i className="fas fa-camera text-2xl text-[#4f4a41]"></i>
+                  </div>
+                  <h3 className="text-xl font-semibold text-[#1a1917] mb-2">
+                    Live Preview
+                  </h3>
+                  <p className="text-[#6d6354] text-sm mb-4">
+                    Lihat photobooth Anda secara real-time
+                  </p>
+                  <div className="flex justify-center gap-6 p-3 bg-white rounded-full">
+                    <div className="flex items-center gap-2 text-sm text-[#6d6354]">
+                      <div className="w-2 h-2 rounded-full bg-[#28c840]"></div>
+                      Server: Aktif
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-[#6d6354]">
+                      <div className="w-2 h-2 rounded-full bg-[#febc2e]"></div>
+                      Kamera: Ready
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Features Section */}
+        <section className="px-8 py-24 bg-white" id="features">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-bold text-[#1a1917] mb-4">
+                Fitur Unggulan
+              </h2>
+              <p className="text-lg text-[#9c8f78] max-w-2xl mx-auto">
+                Semua yang Anda butuhkan untuk menjalankan photobooth
+                profesional dalam satu platform
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              <div className="bg-[#FDF8F3] p-8 rounded-2xl text-center hover:transform hover:translate-y-[-10px] hover:shadow-[0_20px_40px_rgba(155,122,91,0.15)] transition-all">
+                <div className="w-20 h-20 bg-gradient-to-br from-[#EDD9C0] to-[#E8D3BA] rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <i className="fas fa-eye text-3xl text-[#1a1917]"></i>
+                </div>
+                <h3 className="text-xl font-semibold text-[#1a1917] mb-3">
+                  Live Preview
+                </h3>
+                <p className="text-[#9c8f78] text-sm">
+                  Tampilan real-time untuk memastikan setiap pose sempurna
+                  sebelum capture
+                </p>
+              </div>
+              <div className="bg-[#FDF8F3] p-8 rounded-2xl text-center hover:transform hover:translate-y-[-10px] hover:shadow-[0_20px_40px_rgba(155,122,91,0.15)] transition-all">
+                <div className="w-20 h-20 bg-gradient-to-br from-[#EDD9C0] to-[#E8D3BA] rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <i className="fas fa-magic text-3xl text-[#1a1917]"></i>
+                </div>
+                <h3 className="text-xl font-semibold text-[#1a1917] mb-3">
+                  Efek Instan
+                </h3>
+                <p className="text-[#9c8f78] text-sm">
+                  Berbagai filter dan efek menarik yang bisa diterapkan secara
+                  langsung
+                </p>
+              </div>
+              <div className="bg-[#FDF8F3] p-8 rounded-2xl text-center hover:transform hover:translate-y-[-10px] hover:shadow-[0_20px_40px_rgba(155,122,91,0.15)] transition-all">
+                <div className="w-20 h-20 bg-gradient-to-br from-[#EDD9C0] to-[#E8D3BA] rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <i className="fas fa-bolt text-3xl text-[#1a1917]"></i>
+                </div>
+                <h3 className="text-xl font-semibold text-[#1a1917] mb-3">
+                  Capture Cepat
+                </h3>
+                <p className="text-[#9c8f78] text-sm">
+                  Proses pengambilan foto yang cepat dengan countdown otomatis
+                </p>
+              </div>
+              <div className="bg-[#FDF8F3] p-8 rounded-2xl text-center hover:transform hover:translate-y-[-10px] hover:shadow-[0_20px_40px_rgba(155,122,91,0.15)] transition-all">
+                <div className="w-20 h-20 bg-gradient-to-br from-[#EDD9C0] to-[#E8D3BA] rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <i className="fas fa-share-alt text-3xl text-[#1a1917]"></i>
+                </div>
+                <h3 className="text-xl font-semibold text-[#1a1917] mb-3">
+                  Sharing Mudah
+                </h3>
+                <p className="text-[#9c8f78] text-sm">
+                  Bagikan hasil foto langsung ke media sosial atau via QR code
+                </p>
+              </div>
+              <div className="bg-[#FDF8F3] p-8 rounded-2xl text-center hover:transform hover:translate-y-[-10px] hover:shadow-[0_20px_40px_rgba(155,122,91,0.15)] transition-all">
+                <div className="w-20 h-20 bg-gradient-to-br from-[#EDD9C0] to-[#E8D3BA] rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <i className="fas fa-palette text-3xl text-[#1a1917]"></i>
+                </div>
+                <h3 className="text-xl font-semibold text-[#1a1917] mb-3">
+                  Template Custom
+                </h3>
+                <p className="text-[#9c8f78] text-sm">
+                  Desain template sesuai tema acara atau branding Anda
+                </p>
+              </div>
+              <div className="bg-[#FDF8F3] p-8 rounded-2xl text-center hover:transform hover:translate-y-[-10px] hover:shadow-[0_20px_40px_rgba(155,122,91,0.15)] transition-all">
+                <div className="w-20 h-20 bg-gradient-to-br from-[#EDD9C0] to-[#E8D3BA] rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <i className="fas fa-print text-3xl text-[#1a1917]"></i>
+                </div>
+                <h3 className="text-xl font-semibold text-[#1a1917] mb-3">
+                  Print Langsung
+                </h3>
+                <p className="text-[#9c8f78] text-sm">
+                  Integrasi dengan printer untuk cetak foto instan berkualitas
+                  tinggi
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* How It Works */}
+        <section
+          className="px-8 py-24 bg-gradient-to-br from-[#FAF1E7] to-[#F3E5D3]"
+          id="how-it-works"
         >
-          <picture>
-            <source srcSet="https://images.pexels.com/photos/1995123/pexels-photo-1995123.jpeg?auto=compress&cs=tinysrgb&format=webp&w=1920" type="image/webp" />
-            <img
-              src="https://images.pexels.com/photos/1995123/pexels-photo-1995123.jpeg?auto=compress&cs=tinysrgb&w=1920"
-              alt="Pengunjung berpose di photobooth dengan pencahayaan estetik"
-              loading="eager"
-              decoding="async"
-              fetchPriority="high"
-              className="w-full h-full object-cover"
-            />
-          </picture>
-        </figure>
-      </section>
-      <div className="section-divider my-6" />
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-bold text-[#1a1917] mb-4">
+                Cara Kerja
+              </h2>
+              <p className="text-lg text-[#9c8f78]">
+                Mulai dalam 3 langkah sederhana
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-[#C5A888] to-[#9B7A5B] text-white text-2xl font-bold rounded-full flex items-center justify-center mx-auto mb-6">
+                  1
+                </div>
+                <h3 className="text-xl font-semibold text-[#1a1917] mb-2">
+                  Setup Perangkat
+                </h3>
+                <p className="text-[#9c8f78] text-sm">
+                  Hubungkan kamera dan printer ke sistem photobooth
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-[#C5A888] to-[#9B7A5B] text-white text-2xl font-bold rounded-full flex items-center justify-center mx-auto mb-6">
+                  2
+                </div>
+                <h3 className="text-xl font-semibold text-[#1a1917] mb-2">
+                  Konfigurasi
+                </h3>
+                <p className="text-[#9c8f78] text-sm">
+                  Atur template, efek, dan pengaturan sesuai kebutuhan acara
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-[#C5A888] to-[#9B7A5B] text-white text-2xl font-bold rounded-full flex items-center justify-center mx-auto mb-6">
+                  3
+                </div>
+                <h3 className="text-xl font-semibold text-[#1a1917] mb-2">
+                  Mulai Event
+                </h3>
+                <p className="text-[#9c8f78] text-sm">
+                  Tamu bisa langsung menggunakan dan menikmati photobooth
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
 
-      {/* Features */}
-      <section
-        id="features"
-        className="py-12"
-        aria-labelledby="features-heading"
-      >
-        <h2 id="features-heading" className="text-2xl font-semibold mb-6">
-          Fitur Utama
-        </h2>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="p-5 rounded-lg border border-[#e5e7eb] card-soft shadow-card reveal">
-            <div className="flex items-center gap-3 mb-3">
-              <Camera aria-hidden size={20} />
-              <span className="font-semibold">Manajemen Sesi</span>
+        {/* Pricing */}
+        <section className="px-8 py-24 bg-white" id="pricing">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-bold text-[#1a1917] mb-4">
+                Pilihan Paket
+              </h2>
+              <p className="text-lg text-[#9c8f78]">
+                Pilih paket yang sesuai dengan kebutuhan bisnis Anda
+              </p>
             </div>
-            <p className="text-sm text-[#6b7280]">
-              Alur lengkap ARRIVED → ONGOING → DONE dengan kontrol admin dan
-              override.
-            </p>
-          </div>
-          <div className="p-5 rounded-lg border border-[#e5e7eb] card-soft shadow-card reveal">
-            <div className="flex items-center gap-3 mb-3">
-              <ShieldCheck aria-hidden size={20} />
-              <span className="font-semibold">Pembayaran Aman</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+              <div className="bg-[#FDF8F3] rounded-3xl p-10 text-center relative hover:transform hover:translate-y-[-5px] transition-all">
+                <h3 className="text-2xl font-semibold mb-2">Starter</h3>
+                <div className="text-5xl font-extrabold my-4">
+                  Rp 500K
+                  <span className="text-lg font-normal opacity-70">/bulan</span>
+                </div>
+                <ul className="list-none text-left mb-8">
+                  <li className="py-2 flex items-center gap-3">
+                    <i className="fas fa-check text-[#C5A888]"></i>1 Perangkat
+                  </li>
+                  <li className="py-2 flex items-center gap-3">
+                    <i className="fas fa-check text-[#C5A888]"></i>5 Template
+                  </li>
+                  <li className="py-2 flex items-center gap-3">
+                    <i className="fas fa-check text-[#C5A888]"></i>
+                    Filter Dasar
+                  </li>
+                  <li className="py-2 flex items-center gap-3">
+                    <i className="fas fa-check text-[#C5A888]"></i>
+                    Email Support
+                  </li>
+                  <li className="py-2 flex items-center gap-3">
+                    <i className="fas fa-check text-[#C5A888]"></i>
+                    1000 Foto/bulan
+                  </li>
+                </ul>
+                <a
+                  href="#"
+                  className="bg-gradient-to-r from-[#C5A888] to-[#9B7A5B] text-white px-6 py-3 rounded-full no-underline font-semibold hover:transform hover:translate-y-[-2px] hover:shadow-[0_10px_30px_rgba(155,122,91,0.3)] transition-all inline-block w-full text-center"
+                >
+                  Pilih Paket
+                </a>
+              </div>
+              <div className="bg-gradient-to-br from-[#2f2c28] to-[#1a1917] text-white rounded-3xl p-10 text-center relative transform scale-105 hover:scale-105 hover:translate-y-[-5px] transition-all">
+                <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-[#D6BFA1] to-[#B3916F] text-white px-6 py-2 rounded-full text-sm font-semibold">
+                  Populer
+                </div>
+                <h3 className="text-2xl font-semibold mb-2">Professional</h3>
+                <div className="text-5xl font-extrabold my-4">
+                  Rp 1.2JT
+                  <span className="text-lg font-normal opacity-70">/bulan</span>
+                </div>
+                <ul className="list-none text-left mb-8">
+                  <li className="py-2 flex items-center gap-3">
+                    <i className="fas fa-check text-[#EAD0B3]"></i>5 Perangkat
+                  </li>
+                  <li className="py-2 flex items-center gap-3">
+                    <i className="fas fa-check text-[#EAD0B3]"></i>
+                    Unlimited Template
+                  </li>
+                  <li className="py-2 flex items-center gap-3">
+                    <i className="fas fa-check text-[#EAD0B3]"></i>
+                    Semua Filter & Efek
+                  </li>
+                  <li className="py-2 flex items-center gap-3">
+                    <i className="fas fa-check text-[#EAD0B3]"></i>
+                    Priority Support
+                  </li>
+                  <li className="py-2 flex items-center gap-3">
+                    <i className="fas fa-check text-[#EAD0B3]"></i>
+                    Unlimited Foto
+                  </li>
+                  <li className="py-2 flex items-center gap-3">
+                    <i className="fas fa-check text-[#EAD0B3]"></i>
+                    Custom Branding
+                  </li>
+                </ul>
+                <a
+                  href="#"
+                  className="bg-gradient-to-r from-[#E8D3BA] to-[#D6BFA1] text-[#1a1917] px-6 py-3 rounded-full no-underline font-semibold hover:transform hover:translate-y-[-2px] hover:shadow-[0_10px_30px_rgba(155,122,91,0.3)] transition-all inline-block w-full text-center"
+                >
+                  Pilih Paket
+                </a>
+              </div>
             </div>
-            <p className="text-sm text-[#6b7280]">
-              Webhook Xendit dengan validasi signature dan broadcasting status
-              secara real‑time.
-            </p>
           </div>
-          <div className="p-5 rounded-lg border border-[#e5e7eb] card-soft shadow-card reveal">
-            <div className="flex items-center gap-3 mb-3">
-              <Zap aria-hidden size={20} />
-              <span className="font-semibold">Realtime Events</span>
-            </div>
-            <p className="text-sm text-[#6b7280]">
-              SSE/WS untuk update cepat dengan latency rendah dan auto
-              reconnect.
-            </p>
-          </div>
-        </div>
-      </section>
-      <div className="section-divider my-6" />
+        </section>
 
-      {/* Testimonials */}
-      <section
-        id="testimonials"
-        className="py-12"
-        aria-labelledby="testimonials-heading"
-      >
-        <h2 id="testimonials-heading" className="text-2xl font-semibold mb-6">
-          Apa Kata Mereka
-        </h2>
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="p-5 rounded-lg border border-[#e5e7eb] bg-white shadow-card">
-            <div className="flex items-center gap-2 mb-2">
-              <Users aria-hidden size={18} />
-              <span className="font-semibold">Event Organizer</span>
-            </div>
-            <p className="text-sm text-[#6b7280]">
-              “Panel adminnya ringkas dan cepat. Monitoring booth jadi jauh
-              lebih mudah.”
-            </p>
-            <div className="mt-3 text-[#f59e0b]" aria-label="Rating">
-              <Star size={16} className="inline" />{" "}
-              <Star size={16} className="inline" />{" "}
-              <Star size={16} className="inline" />{" "}
-              <Star size={16} className="inline" />{" "}
-              <Star size={16} className="inline" />
-            </div>
-          </div>
-          <div className="p-5 rounded-lg border border-[#e5e7eb] bg-white shadow-card">
-            <div className="flex items-center gap-2 mb-2">
-              <Users aria-hidden size={18} />
-              <span className="font-semibold">Venue Partner</span>
-            </div>
-            <p className="text-sm text-[#6b7280]">
-              “Integrasi pembayaran berjalan mulus. Laporan transaksi akurat.”
-            </p>
-            <div className="mt-3 text-[#f59e0b]" aria-label="Rating">
-              <Star size={16} className="inline" />{" "}
-              <Star size={16} className="inline" />{" "}
-              <Star size={16} className="inline" />{" "}
-              <Star size={16} className="inline" />{" "}
-              <Star size={16} className="inline" />
-            </div>
-          </div>
-          <div className="p-5 rounded-lg border border-[#e5e7eb] bg-white shadow-card">
-            <div className="flex items-center gap-2 mb-2">
-              <Users aria-hidden size={18} />
-              <span className="font-semibold">Brand Activation</span>
-            </div>
-            <p className="text-sm text-[#6b7280]">
-              “Realtime feed membantu kami melihat antrian dan performa booth.”
-            </p>
-            <div className="mt-3 text-[#f59e0b]" aria-label="Rating">
-              <Star size={16} className="inline" />{" "}
-              <Star size={16} className="inline" />{" "}
-              <Star size={16} className="inline" />{" "}
-              <Star size={16} className="inline" />{" "}
-              <Star size={16} className="inline" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Final CTA */}
-      <section className="py-12" aria-labelledby="cta-heading">
-        <div className="p-6 rounded-lg border border-[#e5e7eb] card-soft shadow-card flex flex-col md:flex-row items-center justify-between gap-4 reveal">
-          <div>
-            <h2 id="cta-heading" className="text-xl font-semibold">
-              Siap meningkatkan pengalaman booth Anda?
-            </h2>
-            <p className="text-sm text-[#6b7280]">
-              Mulai gunakan backoffice yang cepat, aman, dan mudah dioperasikan.
-            </p>
-          </div>
+        {/* CTA Section */}
+        <section
+          className="px-8 py-24 bg-gradient-to-br from-[#2f2c28] to-[#1a1917] text-center text-white"
+          id="contact"
+        >
+          <h2 className="text-4xl font-bold mb-4">Siap Memulai?</h2>
+          <p className="text-xl opacity-80 mb-8 max-w-2xl mx-auto">
+            Bergabung dengan ratusan event organizer yang sudah mempercayai
+            photobooth kami
+          </p>
           <a
-            href="/login"
-            className="inline-flex h-9 px-4 items-center rounded-md btn-gradient text-sm"
+            href="#"
+            className="bg-gradient-to-r from-[#E8D3BA] to-[#D6BFA1] text-[#1a1917] px-8 py-4 rounded-full no-underline font-semibold text-lg hover:transform hover:translate-y-[-2px] hover:shadow-[0_10px_30px_rgba(155,122,91,0.3)] transition-all inline-block"
           >
-            Mulai Sekarang
+            Hubungi Kami <i className="fas fa-arrow-right ml-2"></i>
           </a>
-        </div>
-      </section>
-      </main>
-    </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="bg-[#1a1917] text-[#e5e5e5] px-8 py-12">
+          <div className="max-w-6xl mx-auto flex justify-between items-center flex-wrap gap-8">
+            <div className="text-xl font-bold text-white flex items-center gap-2">
+              <i className="fas fa-camera-retro text-[#9c8f78]"></i>
+              Photobooth
+            </div>
+            <ul className="flex gap-8 list-none">
+              <li>
+                <a
+                  href="#"
+                  className="text-[#d4d4d4] no-underline hover:text-[#9c8f78] transition-colors"
+                >
+                  Tentang Kami
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#"
+                  className="text-[#d4d4d4] no-underline hover:text-[#9c8f78] transition-colors"
+                >
+                  Kebijakan Privasi
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#"
+                  className="text-[#d4d4d4] no-underline hover:text-[#9c8f78] transition-colors"
+                >
+                  Syarat & Ketentuan
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#"
+                  className="text-[#d4d4d4] no-underline hover:text-[#9c8f78] transition-colors"
+                >
+                  FAQ
+                </a>
+              </li>
+            </ul>
+            <div className="flex gap-4">
+              <a
+                href="#"
+                className="w-10 h-10 bg-[#2f2c28] rounded-full flex items-center justify-center text-[#d4d4d4] hover:bg-[#C5A888] hover:text-white transition-all"
+              >
+                <i className="fab fa-instagram"></i>
+              </a>
+              <a
+                href="#"
+                className="w-10 h-10 bg-[#2f2c28] rounded-full flex items-center justify-center text-[#d4d4d4] hover:bg-[#C5A888] hover:text-white transition-all"
+              >
+                <i className="fab fa-facebook"></i>
+              </a>
+              <a
+                href="#"
+                className="w-10 h-10 bg-[#2f2c28] rounded-full flex items-center justify-center text-[#d4d4d4] hover:bg-[#C5A888] hover:text-white transition-all"
+              >
+                <i className="fab fa-whatsapp"></i>
+              </a>
+            </div>
+          </div>
+        </footer>
+
+        {/* Font Awesome */}
+        <link
+          rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+        />
+      </div>
+    </>
   );
 }
