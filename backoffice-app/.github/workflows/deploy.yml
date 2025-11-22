@@ -106,19 +106,22 @@ jobs:
           script: |
             cd /home/deploy/backoffice-app
 
-            # Backup current compose file
-            cp docker-compose.yml docker-compose.yml.backup
+            # Create directory if not exists
+            mkdir -p logs
+
+            # Backup current compose file if exists
+            if [ -f docker-compose.yml ]; then
+              cp docker-compose.yml docker-compose.yml.backup
+            fi
 
             # Parse backend environment from secrets
             echo '${{ secrets.BACKEND_ENV }}' > .env.backend
 
-            # Parse frontend environment from secrets  
+            # Parse frontend environment from secrets
             echo '${{ secrets.FRONTEND_ENV }}' > .env.frontend
 
             # Create new compose file with updated image tags
             cat > docker-compose.yml << 'EOF'
-            version: '3.8'
-
             services:
               backend:
                 image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ steps.meta.outputs.tags }}
@@ -238,9 +241,9 @@ jobs:
       - name: Deploy to Staging
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.DO_STAGING_HOST }}
-          username: ${{ secrets.DO_STAGING_USER }}
-          password: ${{ secrets.DO_STAGING_PASSWORD }}
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          password: ${{ secrets.DO_PASSWORD }}
           script: |
             cd /home/deploy/backoffice-app-staging
 
