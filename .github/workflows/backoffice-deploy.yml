@@ -82,6 +82,17 @@ jobs:
           echo "📡 Server: ${{ secrets.DO_HOST }}"
           echo "👤 User: ${{ secrets.DO_USER }}"
 
+      - name: Deploy to Production (Direct Upload)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          password: ${{ secrets.DO_PASSWORD }}
+          source: "backoffice-app/backend/*,backoffice-app/frontend/*"
+          target: "/home/deploy/backoffice-app/backoffice-app/"
+          strip_components: 1
+          timeout: 300s
+
       - name: Deploy to Production (Build Direct)
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -89,7 +100,7 @@ jobs:
           username: ${{ secrets.DO_USER }}
           password: ${{ secrets.DO_PASSWORD }}
           script: |
-            cd /home/deploy/backoffice-app
+            cd /home/deploy/backoffice-app/backoffice-app
 
             # Create directory if not exists
             mkdir -p logs
@@ -102,7 +113,7 @@ jobs:
             # Parse backend environment from secrets
             echo '${{ secrets.BACKEND_ENV }}' > .env.backend
 
-            # Parse frontend environment from secrets  
+            # Parse frontend environment from secrets
             echo '${{ secrets.FRONTEND_ENV }}' > .env.frontend
 
             # Create new compose file with build context
@@ -110,7 +121,7 @@ jobs:
             services:
               backend:
                 build:
-                  context: ./backoffice-app/backend
+                  context: ./backend
                   dockerfile: Dockerfile
                 container_name: backoffice-backend
                 ports:
@@ -119,7 +130,7 @@ jobs:
                   - .env.backend
                 restart: unless-stopped
                 healthcheck:
-                  test: ["CMD", "wget", "-qO-", "http://localhost:3002/healthz"]
+                  test: ["CMD", "curl", "-f", "http://localhost:3002/healthz"]
                   interval: 30s
                   timeout: 5s
                   retries: 3
@@ -127,7 +138,7 @@ jobs:
                 
               frontend:
                 build:
-                  context: ./backoffice-app/frontend
+                  context: ./frontend
                   dockerfile: Dockerfile
                   args:
                     VITE_API_BASE_URL: https://api.pijarrupa.com
@@ -145,23 +156,14 @@ jobs:
                 depends_on:
                   - backend
                 healthcheck:
-                  test: ["CMD", "wget", "-qO-", "http://localhost:5210"]
+                  test: ["CMD", "curl", "-f", "http://localhost:5210"]
                   interval: 30s
                   timeout: 5s
                   retries: 3
                   start_period: 10s
             EOF
 
-            # Clone latest source code
-            if [ -d "backoffice-app" ]; then
-              rm -rf backoffice-app
-            fi
-            git clone https://github.com/rfq13/bootbooth.git backoffice-app
-            cd backoffice-app
-            git checkout main
-
-            # Build and deploy
-            cd /home/deploy/backoffice-app
+            # Build and deploy (files already uploaded to correct location)
             docker compose build
             docker compose down
             docker compose up -d
@@ -182,7 +184,7 @@ jobs:
             echo "Production deployment completed successfully!"
 
             # Log deployment info
-            echo "$(date): Deployed from source code" >> logs/deploy.log
+            echo "$(date): Deployed via direct upload" >> logs/deploy.log
 
   build-and-deploy-staging:
     needs: test
@@ -192,6 +194,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Deploy to Staging (Direct Upload)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          password: ${{ secrets.DO_PASSWORD }}
+          source: "backoffice-app/backend/*,backoffice-app/frontend/*"
+          target: "/home/deploy/backoffice-app-staging/backoffice-app/"
+          strip_components: 1
+          timeout: 300s
+
       - name: Deploy to Staging (Build Direct)
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -199,7 +212,7 @@ jobs:
           username: ${{ secrets.DO_USER }}
           password: ${{ secrets.DO_PASSWORD }}
           script: |
-            cd /home/deploy/backoffice-app-staging
+            cd /home/deploy/backoffice-app-staging/backoffice-app
 
             # Create directory if not exists
             mkdir -p logs
@@ -213,7 +226,7 @@ jobs:
             services:
               backend:
                 build:
-                  context: ./backoffice-app/backend
+                  context: ./backend
                   dockerfile: Dockerfile
                 container_name: backoffice-backend-staging
                 ports:
@@ -222,7 +235,7 @@ jobs:
                   - .env.backend
                 restart: unless-stopped
                 healthcheck:
-                  test: ["CMD", "wget", "-qO-", "http://localhost:3002/healthz"]
+                  test: ["CMD", "curl", "-f", "http://localhost:3002/healthz"]
                   interval: 30s
                   timeout: 5s
                   retries: 3
@@ -230,7 +243,7 @@ jobs:
                 
               frontend:
                 build:
-                  context: ./backoffice-app/frontend
+                  context: ./frontend
                   dockerfile: Dockerfile
                   args:
                     VITE_API_BASE_URL: https://staging.api.pijarrupa.com
@@ -248,23 +261,14 @@ jobs:
                 depends_on:
                   - backend
                 healthcheck:
-                  test: ["CMD", "wget", "-qO-", "http://localhost:5210"]
+                  test: ["CMD", "curl", "-f", "http://localhost:5210"]
                   interval: 30s
                   timeout: 5s
                   retries: 3
                   start_period: 10s
             EOF
 
-            # Clone latest source code
-            if [ -d "backoffice-app" ]; then
-              rm -rf backoffice-app
-            fi
-            git clone https://github.com/rfq13/bootbooth.git backoffice-app
-            cd backoffice-app
-            git checkout develop
-
-            # Build and deploy to staging
-            cd /home/deploy/backoffice-app-staging
+            # Build and deploy to staging (files already uploaded to correct location)
             docker compose build
             docker compose down
             docker compose up -d

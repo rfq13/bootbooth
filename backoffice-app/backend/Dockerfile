@@ -19,8 +19,10 @@ COPY --from=build /out/migrate /app/migrate
 COPY --from=build /out/seed /app/seed
 COPY --from=build /src/migrations /app/migrations
 COPY --from=build /src/seeds /app/seeds
+# Install curl for healthcheck
+RUN apk add --no-cache curl
 RUN adduser -D appuser
 USER appuser
-EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD wget -qO- http://localhost:8080/healthz || exit 1
+EXPOSE 3002
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD curl -f http://localhost:3002/healthz || exit 1
 CMD ["/app/server"]
