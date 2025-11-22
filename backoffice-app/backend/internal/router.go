@@ -232,6 +232,12 @@ func buildRouter() http.Handler {
             return
         }
         
+        // Health check endpoint - no auth required
+        if r.URL.Path == "/healthz" {
+            writeJSON(w, 200, map[string]string{"ok": "true"})
+            return
+        }
+        
         // Route public endpoints
         if r.URL.Path == "/api/booth/register" {
             publicHandler.ServeHTTP(w, r)
