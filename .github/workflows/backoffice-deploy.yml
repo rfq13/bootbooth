@@ -60,6 +60,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate Secrets
+        run: |
+          echo "Checking required secrets..."
+          if [ -z "${{ secrets.DO_HOST }}" ]; then
+            echo "❌ DO_HOST secret is missing or empty"
+            echo "Please add DO_HOST secret with your server IP address"
+            exit 1
+          fi
+          if [ -z "${{ secrets.DO_USER }}" ]; then
+            echo "❌ DO_USER secret is missing or empty"
+            echo "Please add DO_USER secret (usually 'deploy')"
+            exit 1
+          fi
+          if [ -z "${{ secrets.DO_PASSWORD }}" ]; then
+            echo "❌ DO_PASSWORD secret is missing or empty"
+            echo "Please add DO_PASSWORD secret with your SSH password"
+            exit 1
+          fi
+          echo "✅ All required secrets are present"
+          echo "📡 Server: ${{ secrets.DO_HOST }}"
+          echo "👤 User: ${{ secrets.DO_USER }}"
+
       - name: Deploy to Production (Build Direct)
         uses: appleboy/ssh-action@v1.0.3
         with:
