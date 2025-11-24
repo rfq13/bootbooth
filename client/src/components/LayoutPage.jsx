@@ -104,6 +104,51 @@ const LayoutPage = ({ onBack }) => {
         seat: false,
       },
     },
+    {
+      id: "jeans",
+      name: "Jeans",
+      description: "Setiap foto memakai frame PNG",
+      preview: "🖼️",
+      color: "from-yellow-500 to-orange-600",
+      requiredPhotos: 6,
+      settings: {
+        eventName: false,
+        date: false,
+        time: false,
+        row: false,
+        seat: false,
+      },
+    },
+    {
+      id: "youtube4r",
+      name: "YouTube 4R",
+      description: "Tampilan mirip YouTube dengan 6 thumbnail",
+      preview: "▶️",
+      color: "from-red-600 to-gray-700",
+      requiredPhotos: 6,
+      settings: {
+        eventName: false,
+        date: false,
+        time: false,
+        row: false,
+        seat: false,
+      },
+    },
+    {
+      id: "instagram4r",
+      name: "Instagram 4R",
+      description: "Feed bergaya Instagram dengan stories dan nav",
+      preview: "📷",
+      color: "from-pink-500 to-yellow-400",
+      requiredPhotos: 6,
+      settings: {
+        eventName: false,
+        date: false,
+        time: false,
+        row: false,
+        seat: false,
+      },
+    },
   ];
 
   useEffect(() => {

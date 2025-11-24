@@ -2,6 +2,7 @@ import { useRef } from "preact/hooks";
 import PhotoBoothTicket from "./templates/PhotoBoothTicket";
 import PhotoStrip from "./templates/PhotoStrip";
 import DoublePhotoStrip from "./templates/DoublePhotoStrip";
+import Jeans from "./templates/Jeans";
 import FramedDoublePhotoStrip from "./templates/FramedDoublePhotoStrip";
 
 const TemplateSelection = ({
@@ -58,7 +59,10 @@ const TemplateSelection = ({
     if (id === "grid4") {
       return (
         <div style={containerStyle} className="rounded-xl bg-white">
-          <div style={scaleWrapStyle} className="grid grid-cols-2 gap-3 w-[600px] h-[900px] bg-white p-4 border border-primary-200 rounded-3xl">
+          <div
+            style={scaleWrapStyle}
+            className="grid grid-cols-2 gap-3 w-[600px] h-[900px] bg-white p-4 border border-primary-200 rounded-3xl"
+          >
             {[...Array(4)].map((_, idx) => (
               <div
                 key={idx}
@@ -79,6 +83,15 @@ const TemplateSelection = ({
         <div style={containerStyle} className="rounded-xl bg-white">
           <div style={scaleWrapStyle}>
             <FramedDoublePhotoStrip photos={photos} domRef={previewRef} />
+          </div>
+        </div>
+      );
+    }
+    if (id === "jeans") {
+      return (
+        <div style={containerStyle} className="rounded-xl bg-white">
+          <div style={scaleWrapStyle}>
+            <Jeans photos={photos} domRef={previewRef} />
           </div>
         </div>
       );
@@ -104,12 +117,22 @@ const TemplateSelection = ({
                 : "shadow-lg hover:shadow-xl"
             }`}
           >
-            <div className={`h-48 bg-white p-4 flex items-center justify-center`}>{renderPreview(template.id)}</div>
-            <div className={`p-4 bg-gradient-to-br ${template.color} text-white`}>
+            <div
+              className={`h-48 bg-white p-4 flex items-center justify-center`}
+            >
+              {renderPreview(template.id)}
+            </div>
+            <div
+              className={`p-4 bg-gradient-to-br ${template.color} text-white`}
+            >
               <h3 className="text-lg font-bold text-center">{template.name}</h3>
-              <p className="text-xs text-center mt-1 opacity-90">{template.description}</p>
+              <p className="text-xs text-center mt-1 opacity-90">
+                {template.description}
+              </p>
               <div className="mt-2 bg-white/20 backdrop-blur-sm rounded-full px-3 py-1 inline-block">
-                <span className="text-xs font-semibold">{template.requiredPhotos} foto</span>
+                <span className="text-xs font-semibold">
+                  {template.requiredPhotos} foto
+                </span>
               </div>
             </div>
             {selectedTemplate?.id === template.id && (

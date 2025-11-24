@@ -3,6 +3,9 @@ import PhotoBoothTicket from "./templates/PhotoBoothTicket";
 import PhotoStrip from "./templates/PhotoStrip";
 import DoublePhotoStrip from "./templates/DoublePhotoStrip";
 import FramedDoublePhotoStrip from "./templates/FramedDoublePhotoStrip";
+import Jeans from "./templates/Jeans";
+import YouTube4R from "./templates/YouTube4R";
+import Instagram4R from "./templates/Instagram4R";
 import { API_URL } from "../constants";
 
 const LayoutPreview = ({
@@ -57,6 +60,24 @@ const LayoutPreview = ({
           />
         ) : selectedTemplate?.id === "strip" ? (
           <PhotoStrip
+            photos={getPhotoUrls()}
+            domRef={layoutRef}
+            onClickSlot={onOpenSlotPicker}
+          />
+        ) : selectedTemplate?.id === "jeans" ? (
+          <Jeans
+            photos={getPhotoUrls()}
+            domRef={layoutRef}
+            onClickSlot={onOpenSlotPicker}
+          />
+        ) : selectedTemplate?.id === "youtube4r" ? (
+          <YouTube4R
+            photos={getPhotoUrls()}
+            domRef={layoutRef}
+            onClickSlot={onOpenSlotPicker}
+          />
+        ) : selectedTemplate?.id === "instagram4r" ? (
+          <Instagram4R
             photos={getPhotoUrls()}
             domRef={layoutRef}
             onClickSlot={onOpenSlotPicker}
