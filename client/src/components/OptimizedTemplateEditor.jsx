@@ -116,9 +116,6 @@ export default function OptimizedTemplateEditor(props) {
   const [usePersonSegmentation, setUsePersonSegmentation] = useState(false);
   const [modelLoadingProgress, setModelLoadingProgress] = useState(0);
   const [segmentationThreshold, setSegmentationThreshold] = useState(0.5);
-  const [faceMaskData, setFaceMaskData] = useState(null);
-  const [useFaceMask, setUseFaceMask] = useState(false);
-  const [isDetectingFace, setIsDetectingFace] = useState(false);
 
   // Get URL parameters from props in preact-router
   const url = props.url || window.location.pathname + window.location.search;
@@ -256,12 +253,13 @@ export default function OptimizedTemplateEditor(props) {
 
           // LAYER 2: Person (TRANSPARANT BACKGROUND!)
           try {
-            let maskToUse = personMask;
-            if (useFaceMask && faceMaskData && faceMaskData.mask && personMask?.mask) {
-              const merged = faceMaskingUtils.mergeMasks(personMask.mask, faceMaskData.mask);
-              maskToUse = { ...personMask, mask: merged };
-            }
-            const personLayer = faceMaskingUtils.extractPersonLayer(maskToUse, { feather: 3 });
+            // Extract person dengan background REMOVED
+            const personLayer = faceMaskingUtils.extractPersonLayer(
+              personMask,
+              {
+                feather: 3, // Smooth edge
+              }
+            );
 
             // Calculate position to center
             const ratio = Math.min(
@@ -554,25 +552,6 @@ export default function OptimizedTemplateEditor(props) {
     }
   };
 
-  const detectFace = async () => {
-    if (!photoDataUrl) {
-      setError("Tidak ada foto untuk face masking");
-      return;
-    }
-    setIsDetectingFace(true);
-    try {
-      const fm = await faceMaskingUtils.segmentFaceWithWorker(photoDataUrl, { expansion: 15, feather: 5 });
-      setFaceMaskData(fm);
-      setUseFaceMask(true);
-      debouncedRender();
-    } catch (e) {
-      setError(e.message || "Face masking gagal");
-      setUseFaceMask(false);
-    } finally {
-      setIsDetectingFace(false);
-    }
-  };
-
   // Toggle person segmentation
   const togglePersonSegmentation = () => {
     if (!personMask && photoDataUrl) {
@@ -847,17 +826,6 @@ export default function OptimizedTemplateEditor(props) {
                         : "Auto Person Segmentation"}
                     </span>
                   )}
-                </button>
-                <button
-                  className={`px-4 py-2 rounded-xl font-medium transition-all shadow-soft ${
-                    useFaceMask
-                      ? "bg-gradient-to-r from-amber-400 to-amber-600 text-white"
-                      : "bg-white border border-primary-200 text-secondary-700 hover:bg-amber-50"
-                  }`}
-                  onClick={detectFace}
-                  disabled={!photoDataUrl || isDetectingFace}
-                >
-                  {isDetectingFace ? "Detecting..." : "Refine Face Mask"}
                 </button>
               </div>
 

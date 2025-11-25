@@ -4,6 +4,8 @@ import PhotoStrip from "./templates/PhotoStrip";
 import DoublePhotoStrip from "./templates/DoublePhotoStrip";
 import Jeans from "./templates/Jeans";
 import FramedDoublePhotoStrip from "./templates/FramedDoublePhotoStrip";
+import YouTube4R from "./templates/YouTube4R";
+import Instagram4R from "./templates/Instagram4R";
 
 const TemplateSelection = ({
   templates,
@@ -92,6 +94,24 @@ const TemplateSelection = ({
         <div style={containerStyle} className="rounded-xl bg-white">
           <div style={scaleWrapStyle}>
             <Jeans photos={photos} domRef={previewRef} />
+          </div>
+        </div>
+      );
+    }
+    if (id === "youtube4r") {
+      return (
+        <div style={containerStyle} className="rounded-xl bg-white">
+          <div style={scaleWrapStyle}>
+            <YouTube4R photos={photos} domRef={previewRef} />
+          </div>
+        </div>
+      );
+    }
+    if (id === "instagram4r") {
+      return (
+        <div style={containerStyle} className="rounded-xl bg-white">
+          <div style={scaleWrapStyle}>
+            <Instagram4R photos={photos} domRef={previewRef} />
           </div>
         </div>
       );

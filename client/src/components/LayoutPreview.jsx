@@ -20,6 +20,9 @@ const LayoutPreview = ({
   onResetSession,
   onProceedToPrint,
   onOpenSlotPicker,
+  showVirtualKeyboard,
+  hideVirtualKeyboard,
+  currentEditingIndex,
 }) => {
   const layoutRef = useRef(null);
   const [isPrinting, setIsPrinting] = useState(false);
@@ -75,6 +78,9 @@ const LayoutPreview = ({
             photos={getPhotoUrls()}
             domRef={layoutRef}
             onClickSlot={onOpenSlotPicker}
+            showVirtualKeyboard={showVirtualKeyboard}
+            hideVirtualKeyboard={hideVirtualKeyboard}
+            currentEditingIndex={currentEditingIndex}
           />
         ) : selectedTemplate?.id === "instagram4r" ? (
           <Instagram4R
