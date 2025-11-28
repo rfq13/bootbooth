@@ -237,7 +237,12 @@ const PhotoBoothTicket = ({
                 {/* QR Code - only on first strip */}
                 {stripNum === 1 && qrCode && (
                   <div className="absolute top-4 right-4 w-16 h-16 bg-white p-1 rounded">
-                    <img src={qrCode} alt="QR" className="w-full h-full" />
+                    <img
+                      src={qrCode}
+                      alt="QR"
+                      className="w-full h-full"
+                      crossOrigin="anonymous"
+                    />
                   </div>
                 )}
 
@@ -349,6 +354,7 @@ const PhotoBoothTicket = ({
                               src={photo}
                               alt={`Photo ${actualIdx + 1}`}
                               className="w-full h-full object-cover"
+                              crossOrigin="anonymous"
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-secondary-500 text-sm">

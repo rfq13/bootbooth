@@ -25,7 +25,8 @@ SOURCES = $(SRC_DIR)/main.cpp \
           $(SRC_DIR)/mjpeg_server.cpp \
           $(SRC_DIR)/web_socket_server.cpp \
           $(SRC_DIR)/photobooth_server.cpp \
-          $(SRC_DIR)/booth_identity.cpp
+          $(SRC_DIR)/booth_identity.cpp \
+          $(SRC_DIR)/template_renderer.cpp
 
 # All sources
 ALL_SOURCES = $(SOURCES)

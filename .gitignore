@@ -83,7 +83,6 @@ jspm_packages/
 
 # Uploads folder
 uploads/
-*.jpg
 *.jpeg
 *.gif
 *.bmp
