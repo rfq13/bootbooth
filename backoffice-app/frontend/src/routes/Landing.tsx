@@ -1,5 +1,8 @@
 // Komponen landing terpisah dari admin, tidak menggunakan UI dari admin
 import { useEffect } from "react";
+import { Helmet } from "react-helmet-async";
+
+const appName = import.meta.env.VITE_APP_NAME || "PijarRupa";
 
 export default function Landing() {
   useEffect(() => {
@@ -30,6 +33,14 @@ export default function Landing() {
 
   return (
     <>
+      <Helmet>
+        <title>{appName} - Solusi Photobooth Modern</title>
+        <meta
+          name="description"
+          content="Solusi photobooth modern dengan live preview, efek instan, dan kemudahan capture. Sempurna untuk menciptakan momen berkesan dengan gaya."
+        />
+      </Helmet>
+
       <style>
         {`
           @keyframes float {
@@ -52,7 +63,7 @@ export default function Landing() {
           <div className="max-w-6xl mx-auto flex justify-between items-center">
             <div className="flex items-center gap-2 text-2xl font-bold text-[#1a1917]">
               <i className="fas fa-camera-retro text-[#B3916F]"></i>
-              Photobooth
+              {appName}
             </div>
             <ul className="flex gap-8 list-none">
               <li>
@@ -426,12 +437,12 @@ export default function Landing() {
           <div className="max-w-6xl mx-auto flex justify-between items-center flex-wrap gap-8">
             <div className="text-xl font-bold text-white flex items-center gap-2">
               <i className="fas fa-camera-retro text-[#9c8f78]"></i>
-              Photobooth
+              {appName}
             </div>
             <ul className="flex gap-8 list-none">
               <li>
                 <a
-                  href="#"
+                  href="/tentang-kami"
                   className="text-[#d4d4d4] no-underline hover:text-[#9c8f78] transition-colors"
                 >
                   Tentang Kami
@@ -447,7 +458,7 @@ export default function Landing() {
               </li>
               <li>
                 <a
-                  href="#"
+                  href="/syarat-dan-ketentuan"
                   className="text-[#d4d4d4] no-underline hover:text-[#9c8f78] transition-colors"
                 >
                   Syarat & Ketentuan

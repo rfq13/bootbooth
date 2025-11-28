@@ -133,7 +133,7 @@ func requireAuth(next http.Handler) http.Handler {
         }
         
         auth := r.Header.Get("Authorization")
-        if auth == "" || !strings.HasPrefix(auth, "Bearer ") { writeError(w, http.StatusUnauthorized, "unauthorized nur auto kontol"); return }
+        if auth == "" || !strings.HasPrefix(auth, "Bearer ") { writeError(w, http.StatusUnauthorized, "unauthorized"); return }
         tok := strings.TrimPrefix(auth, "Bearer ")
         secret := envString("BACKOFFICE_JWT_SECRET", "dev-secret")
         if tok == "devtoken" && secret == "dev-secret" {
