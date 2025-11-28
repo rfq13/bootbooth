@@ -1,0 +1,35 @@
+services:
+  backend:
+    image: ghcr.io/your-repo/backend:latest
+    container_name: backoffice-backend
+    ports:
+      - "3002:3002"
+    env_file:
+      - .env.backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3002/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    image: ghcr.io/your-repo/frontend:latest
+    container_name: backoffice-frontend
+    ports:
+      - "5210:5210"
+    environment:
+      NODE_ENV: production
+      PORT: 5210
+    env_file:
+      - .env.frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5210"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

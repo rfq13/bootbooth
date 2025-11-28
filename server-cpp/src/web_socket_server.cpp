@@ -1,5 +1,6 @@
 #include "../include/server.h"
 #include "../include/booth_identity.h"
+#include "../include/template_renderer.h"
 #include <cerrno>
 #include <sys/time.h>
 #include <cstring>
@@ -583,6 +584,10 @@ void WebSocketServer::onHttpRequest(connection_hdl hdl) {
             // Handle static file requests for uploads directory
             std::cout << "🔍 DEBUG: Routing to handleStaticFileRequest with path: " << path << std::endl;
             handleStaticFileRequest(hdl, path);
+        } else if (path == "/api/upload-image" && method == "POST") {
+            handleHttpUploadImagePostRequest(hdl, con);
+        } else if (path == "/api/render-template" && method == "POST") {
+            handleHttpRenderTemplatePostRequest(hdl, con);
         } else {
             std::cout << "🔍 DEBUG: No route found for path: " << path << std::endl;
             sendHttpResponse(hdl, 404, "{\"error\":\"Not Found\"}", "application/json", true);
@@ -904,4 +909,138 @@ void WebSocketServer::handleStaticFileRequest(connection_hdl hdl, const std::str
         std::cerr << "Error serving static file: " << e.what() << std::endl;
         sendHttpResponse(hdl, 500, "{\"error\":\"Internal Server Error\"}", "application/json", true);
     }
+}
+
+static std::vector<unsigned char> base64Decode(const std::string& input) {
+    static const std::string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::vector<int> T(256, -1);
+    for (int i = 0; i < 64; i++) T[chars[i]] = i;
+    std::vector<unsigned char> out;
+    std::vector<int> quad;
+    for (char c : input) {
+        if (c == '=') break;
+        int val = T[(unsigned char)c];
+        if (val == -1) continue;
+        quad.push_back(val);
+        if (quad.size() == 4) {
+            out.push_back((unsigned char)((quad[0] << 2) | (quad[1] >> 4)));
+            out.push_back((unsigned char)(((quad[1] & 0xF) << 4) | (quad[2] >> 2)));
+            out.push_back((unsigned char)(((quad[2] & 0x3) << 6) | quad[3]));
+            quad.clear();
+        }
+    }
+    if (quad.size() == 3) {
+        out.push_back((unsigned char)((quad[0] << 2) | (quad[1] >> 4)));
+        out.push_back((unsigned char)(((quad[1] & 0xF) << 4) | (quad[2] >> 2)));
+    } else if (quad.size() == 2) {
+        out.push_back((unsigned char)((quad[0] << 2) | (quad[1] >> 4)));
+    }
+    return out;
+}
+
+void WebSocketServer::handleHttpUploadImagePostRequest(connection_hdl hdl, websocket_server::connection_ptr con) {
+    std::string body = con->get_request().get_body();
+    std::regex filenameRegex(R"RGX("filename"\s*:\s*"([^"]+)")RGX");
+    std::regex imageRegex(R"RGX("imageBase64"\s*:\s*"([\\"A-Za-z0-9+/=,:;._-]+)"\s*)RGX");
+    std::smatch m;
+    std::string filename;
+    std::string imageB64;
+    if (std::regex_search(body, m, filenameRegex)) filename = m[1].str();
+    if (std::regex_search(body, m, imageRegex)) imageB64 = m[1].str();
+    if (filename.empty() || imageB64.empty()) {
+        sendHttpResponse(hdl, 400, "{\"success\":false,\"error\":\"invalid_request\"}", "application/json", true);
+        return;
+    }
+    size_t commaPos = imageB64.find(",");
+    if (commaPos != std::string::npos) imageB64 = imageB64.substr(commaPos+1);
+    std::vector<unsigned char> data = base64Decode(imageB64);
+    std::string path = "uploads/" + filename;
+    std::ofstream ofs(path, std::ios::binary);
+    if (!ofs.is_open()) {
+        sendHttpResponse(hdl, 500, "{\"success\":false,\"error\":\"write_failed\"}", "application/json", true);
+        return;
+    }
+    ofs.write(reinterpret_cast<const char*>(data.data()), (std::streamsize)data.size());
+    ofs.close();
+    sendHttpResponse(hdl, 200, "{\"success\":true,\"path\":\"/uploads/" + filename + "\"}", "application/json", true);
+}
+
+void WebSocketServer::handleHttpRenderTemplatePostRequest(connection_hdl hdl, websocket_server::connection_ptr con) {
+    std::string body = con->get_request().get_body();
+    std::regex photoPathRegex(R"RGX("photoPath"\s*:\s*"([^"]+)")RGX");
+    std::regex outWRegex(R"RGX("outputWidth"\s*:\s*(\d+))RGX");
+    std::regex outHRegex(R"RGX("outputHeight"\s*:\s*(\d+))RGX");
+    std::regex tmplRegex(R"("template"\s*:\s*(\{[\n\r\t ,:"\[\]A-Za-z0-9._#-]*\}))");
+    std::smatch m;
+    std::string photoPath;
+    int outW = 3000, outH = 4500;
+    std::string tmplStr;
+    if (std::regex_search(body, m, photoPathRegex)) photoPath = m[1].str();
+    if (std::regex_search(body, m, outWRegex)) outW = std::stoi(m[1].str());
+    if (std::regex_search(body, m, outHRegex)) outH = std::stoi(m[1].str());
+    if (std::regex_search(body, m, tmplRegex)) tmplStr = m[1].str();
+    if (photoPath.empty() || tmplStr.empty()) {
+        sendHttpResponse(hdl, 400, "{\"success\":false,\"error\":\"invalid_request\"}", "application/json", true);
+        return;
+    }
+
+    TemplateSpec spec;
+    std::regex bgRegex(R"RGX("background"\s*:\s*"([^"]+)")RGX");
+    if (std::regex_search(tmplStr, m, bgRegex)) spec.backgroundPath = m[1].str();
+    if (!spec.backgroundPath.empty() && spec.backgroundPath[0] == '/') spec.backgroundPath = spec.backgroundPath.substr(1);
+    std::regex overlaysRegex("\"overlays\"\\s*:\\s*\\[(.*?)\\]");
+    if (std::regex_search(tmplStr, m, overlaysRegex)) {
+        std::string arr = m[1].str();
+        std::regex itemRegex("\"([^\"]+)\"");
+        auto it = std::sregex_iterator(arr.begin(), arr.end(), itemRegex);
+        auto end = std::sregex_iterator();
+        for (; it != end; ++it) {
+            std::string p = (*it)[1].str();
+            if (!p.empty() && p[0] == '/') p = p.substr(1);
+            spec.overlays.push_back(p);
+        }
+    }
+    std::regex textsRegex(R"RGX("text"\s*:\s*\[(.*?)\])RGX");
+    if (std::regex_search(tmplStr, m, textsRegex)) {
+        std::string tarr = m[1].str();
+        std::regex objRegex(R"RGX(\{([^\}]*)\})RGX");
+        auto it = std::sregex_iterator(tarr.begin(), tarr.end(), objRegex);
+        auto end = std::sregex_iterator();
+        for (; it != end; ++it) {
+            std::string obj = (*it)[1].str();
+            TextSpec ts;
+            std::smatch mm;
+            std::regex cRegex("\"content\"\\s*:\\s*\"([^\"]+)\"");
+            std::regex fRegex("\"fontPath\"\\s*:\\s*\"([^\"]+)\"");
+            std::regex sizeRegex("\"size\"\\s*:\\s*(\\d+)");
+            std::regex colorRegex("\"color\"\\s*:\\s*\"([^\"]+)\"");
+            std::regex xRegex("\"position\"\\s*:\\s*\{[^\}]*\"x\"\\s*:\\s*(\\d+(?:\\.\\d+)?)");
+            std::regex yRegex("\"position\"\\s*:\\s*\{[^\}]*\"y\"\\s*:\\s*(\\d+(?:\\.\\d+)?)");
+            if (std::regex_search(obj, mm, cRegex)) ts.content = mm[1].str();
+            if (std::regex_search(obj, mm, fRegex)) ts.fontPath = mm[1].str();
+            if (std::regex_search(obj, mm, sizeRegex)) ts.size = std::stoi(mm[1].str());
+            if (std::regex_search(obj, mm, colorRegex)) {
+                unsigned char r=255,g=255,b=255; TemplateRenderer::parseColorHex(mm[1].str(), r,g,b); ts.r=r; ts.g=g; ts.b=b;
+            }
+            if (std::regex_search(obj, mm, xRegex)) ts.x = (float)std::stof(mm[1].str());
+            if (std::regex_search(obj, mm, yRegex)) ts.y = (float)std::stof(mm[1].str());
+            spec.texts.push_back(ts);
+        }
+    }
+
+    if (photoPath.size() && photoPath[0] == '/') photoPath = photoPath.substr(1);
+    std::string outFile = "outputs/render_" + std::to_string(std::time(nullptr)) + ".jpg";
+
+    TemplateRenderer renderer;
+    std::vector<unsigned char> jpeg;
+    bool ok = renderer.renderToJpegBuffer(spec, photoPath, outW, outH, jpeg);
+    if (!ok) {
+        sendHttpResponse(hdl, 500, "{\"success\":false,\"error\":\"render_failed\"}", "application/json", true);
+        return;
+    }
+    std::ofstream ofs(outFile, std::ios::binary);
+    if (ofs.is_open()) { ofs.write(reinterpret_cast<const char*>(jpeg.data()), (std::streamsize)jpeg.size()); ofs.close(); }
+    std::string b64 = this->photoBoothServer->getGPhotoWrapper()->base64Encode(jpeg);
+    std::string resp = std::string("{\"success\":true,\"output\":\"") + b64 + "\",\"path\":\"/" + outFile + "\"}";
+    sendHttpResponse(hdl, 200, resp, "application/json", true);
 }

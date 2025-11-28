@@ -166,17 +166,20 @@ struct Camera {
     std::string port;
 };
 
-// Struktur untuk parameter efek
+// NOTE: Efek foto telah dipindahkan ke frontend untuk optimasi performa
+// Struktur ini tetap ada untuk backward compatibility
 struct EffectParams {
     double intensity = 0.5;  // 0.0 to 1.0
     double radius = 1.0;     // untuk fisheye, vignette
     int pixelSize = 10;      // untuk pixelate
 };
 
-// Enum untuk tipe efek
+// NOTE: Efek foto telah dipindahkan ke frontend untuk optimasi performa
+// Enum ini tetap ada untuk backward compatibility
 enum class EffectType {
     NONE,
     FISHEYE,
+    WIDE_ANGLE,
     GRAYSCALE,
     SEPIA,
     VIGNETTE,
@@ -213,7 +216,8 @@ class WebSocketServer;
 
 class BoothIdentityStore;
 
-// Kelas untuk efek gambar
+// NOTE: ImageEffects class telah di-simplify karena efek dipindahkan ke frontend
+// Class ini tetap ada untuk backward compatibility tapi tidak melakukan processing
 class ImageEffects {
 private:
     EffectType currentEffect;
@@ -224,32 +228,29 @@ public:
     ImageEffects();
     void setEffect(EffectType effect, const EffectParams& params);
     std::pair<EffectType, EffectParams> getEffect() const;
+    
+    // NOTE: applyEffect sekarang hanya return original data (no processing)
     std::vector<unsigned char> applyEffect(const std::vector<unsigned char>& jpegData);
     
+    // Utility methods untuk file operations (tetap dibutuhkan)
+    ImageData decodeFile(const std::string& filePath);
+    bool encodeFile(const std::string& filePath, const ImageData& image);
+    
 private:
-    // JPEG encode/decode methods
+    // JPEG encode/decode methods (tetap dibutuhkan untuk file operations)
     ImageData decodeJPEG(const std::vector<unsigned char>& jpegData);
     std::vector<unsigned char> encodeJPEG(const ImageData& rgbData);
     
-    // Real effect implementations
-    void applyFishEyeEffect(ImageData& image);
+    // NOTE: Effect implementation methods tetap ada untuk backward compatibility tapi tidak melakukan processing
     void applyGrayscaleEffect(ImageData& image);
     void applySepiaEffect(ImageData& image);
+    void applyInvertEffect(ImageData& image);
     void applyVignetteEffect(ImageData& image);
     void applyBlurEffect(ImageData& image);
     void applySharpenEffect(ImageData& image);
-    void applyInvertEffect(ImageData& image);
     void applyPixelateEffect(ImageData& image);
-    
-    // Legacy placeholder methods for backward compatibility
-    std::vector<unsigned char> applyFishEye(const std::vector<unsigned char>& imageData);
-    std::vector<unsigned char> applyGrayscale(const std::vector<unsigned char>& imageData);
-    std::vector<unsigned char> applySepia(const std::vector<unsigned char>& imageData);
-    std::vector<unsigned char> applyVignette(const std::vector<unsigned char>& imageData);
-    std::vector<unsigned char> applyBlur(const std::vector<unsigned char>& imageData);
-    std::vector<unsigned char> applySharpen(const std::vector<unsigned char>& imageData);
-    std::vector<unsigned char> applyInvert(const std::vector<unsigned char>& imageData);
-    std::vector<unsigned char> applyPixelate(const std::vector<unsigned char>& imageData);
+    void applyFishEyeEffect(ImageData& image);
+    void applyWideAngleEffect(ImageData& image);
 };
 
 // Kelas untuk wrapper gphoto2
@@ -380,6 +381,8 @@ private:
     void handleHttpApiIdentityGetRequest(connection_hdl hdl);
     void handleHttpApiIdentityPostRequest(connection_hdl hdl, websocket_server::connection_ptr con);
     void handleHttpApiPhotoDeleteRequest(connection_hdl hdl, const std::string& filename);
+    void handleHttpUploadImagePostRequest(connection_hdl hdl, websocket_server::connection_ptr con);
+    void handleHttpRenderTemplatePostRequest(connection_hdl hdl, websocket_server::connection_ptr con);
     
     // Static file serving handlers
     std::string getMimeTypeFromExtension(const std::string& filename);

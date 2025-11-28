@@ -1,5 +1,6 @@
 import { API_URL } from "../constants";
 import { useEffect, useRef, useState } from "preact/hooks";
+import { route } from "preact-router";
 
 export default function PhotoGallery({
   photos,
@@ -10,7 +11,20 @@ export default function PhotoGallery({
 }) {
   const [loadedImages, setLoadedImages] = useState(new Set());
   const [imageErrors, setImageErrors] = useState(new Set());
+  const [debugInfo, setDebugInfo] = useState("");
   const observerRef = useRef(null);
+
+  // Debug logging
+  useEffect(() => {
+    console.log("PhotoGallery - photos:", photos);
+    console.log("PhotoGallery - API_URL:", API_URL);
+    if (photos && photos.length > 0) {
+      console.log("PhotoGallery - first photo:", photos[0]);
+      setDebugInfo(`Loaded ${photos.length} photos`);
+    } else {
+      setDebugInfo("No photos available");
+    }
+  }, [photos]);
 
   const formatDate = (timestamp) => {
     return new Date(parseInt(timestamp)).toLocaleString("id-ID", {
@@ -29,6 +43,11 @@ export default function PhotoGallery({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleEditPhoto = (photo) => {
+    // Navigasi ke TemplateEditor dengan parameter foto
+    route(`/editor?photo=${encodeURIComponent(photo.filename)}`);
   };
 
   // Initialize Intersection Observer once
@@ -89,9 +108,19 @@ export default function PhotoGallery({
         <h3 className="text-lg font-semibold text-secondary-900 mb-2">
           No Photos Yet
         </h3>
-        <p className="text-secondary-600">
+        <p className="text-secondary-600 mb-2">
           Start capturing memories with your photobooth!
         </p>
+        <p className="text-xs text-gray-500 mb-4">Debug: {debugInfo}</p>
+        <button
+          onClick={() => {
+            console.log("Refresh button clicked");
+            if (onRefreshPhotos) onRefreshPhotos();
+          }}
+          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+        >
+          Refresh Photos
+        </button>
       </div>
     );
   }
@@ -136,7 +165,15 @@ export default function PhotoGallery({
                     isImageLoaded(photo.filename) ? "opacity-100" : "opacity-0"
                   }`}
                   onLoad={() => handleImageLoad(photo.filename)}
-                  onError={() => handleImageError(photo.filename)}
+                  onError={() => {
+                    console.log(
+                      "Image load error:",
+                      photo.filename,
+                      "URL:",
+                      `${API_URL}${photo.path}`
+                    );
+                    handleImageError(photo.filename);
+                  }}
                   ref={(el) => {
                     if (
                       el &&
@@ -157,6 +194,22 @@ export default function PhotoGallery({
                   {formatDate(photo.timestamp)}
                 </span>
                 <div className="flex space-x-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleEditPhoto(photo);
+                    }}
+                    className="bg-blue-500/20 backdrop-blur-sm text-blue-300 p-1 rounded hover:bg-blue-500/30 transition-colors shadow-soft"
+                    title="Edit"
+                  >
+                    <svg
+                      className="w-3 h-3"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                    </svg>
+                  </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

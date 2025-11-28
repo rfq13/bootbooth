@@ -1,10 +1,11 @@
 #include "../include/server.h"
 #include "../include/booth_identity.h"
 
-PhotoBoothServer::PhotoBoothServer(int apiPort, int mjpegPort)
+  PhotoBoothServer::PhotoBoothServer(int apiPort, int mjpegPort)
     : apiPort(apiPort), mjpegPort(mjpegPort), running(false) {
     createDirectories("uploads");
     createDirectories("previews");
+    createDirectories("outputs");
     gphoto = new GPhotoWrapper("uploads", "previews");
     mjpegServer = new MJPEGServer(mjpegPort);
     webSocketServer = new WebSocketServer(apiPort, this);
@@ -305,6 +306,8 @@ void PhotoBoothServer::handleCapturePhotoEvent(connection_hdl hdl) {
 }
 
 void PhotoBoothServer::handleSetEffectEvent(connection_hdl hdl, const std::map<std::string, std::string>& data) {
+    std::cout << "📝 NOTE: handleSetEffectEvent called - effects moved to frontend" << std::endl;
+    
     auto effectIt = data.find("effect");
     if (effectIt == data.end()) {
         std::map<std::string, std::string> response;
@@ -315,20 +318,16 @@ void PhotoBoothServer::handleSetEffectEvent(connection_hdl hdl, const std::map<s
         }
         return;
     }
+    
     std::string effectName = effectIt->second;
-    EffectType effect = EffectType::NONE;
-    if (effectName == "fisheye") effect = EffectType::FISHEYE;
-    else if (effectName == "grayscale") effect = EffectType::GRAYSCALE;
-    else if (effectName == "sepia") effect = EffectType::SEPIA;
-    else if (effectName == "vignette") effect = EffectType::VIGNETTE;
-    else if (effectName == "blur") effect = EffectType::BLUR;
-    else if (effectName == "sharpen") effect = EffectType::SHARPEN;
-    else if (effectName == "invert") effect = EffectType::INVERT;
-    else if (effectName == "pixelate") effect = EffectType::PIXELATE;
+    std::cout << "📝 NOTE: Effect " << effectName << " requested but processing moved to frontend" << std::endl;
+    
+    // Parse parameters for compatibility
     EffectParams params;
     params.intensity = 0.5;
     params.radius = 1.0;
     params.pixelSize = 10;
+    
     auto pIntensityIt = data.find("params.intensity");
     if (pIntensityIt != data.end()) {
         try { params.intensity = std::stod(pIntensityIt->second); if (params.intensity < 0) params.intensity = 0; if (params.intensity > 1) params.intensity = 1; } catch (...) {}
@@ -353,16 +352,22 @@ void PhotoBoothServer::handleSetEffectEvent(connection_hdl hdl, const std::map<s
     if (pixelSizeIt != data.end()) {
         try { params.pixelSize = std::stoi(pixelSizeIt->second); if (params.pixelSize < 1) params.pixelSize = 1; } catch (...) {}
     }
-    mjpegServer->setEffect(effect, params);
-    gphoto->setEffect(effect, params);
-    std::cout << "🎨 Effect set to: " << effectName << " with params: intensity=" << params.intensity
-              << ", radius=" << params.radius << ", pixelSize=" << params.pixelSize << std::endl;
+    
+    // NOTE: Effects are now processed in frontend, but we keep the calls for backward compatibility
+    mjpegServer->setEffect(EffectType::NONE, params);
+    gphoto->setEffect(EffectType::NONE, params);
+    
+    std::cout << "📝 NOTE: Effect " << effectName << " with params: intensity=" << params.intensity
+              << ", radius=" << params.radius << ", pixelSize=" << params.pixelSize << " - processing moved to frontend" << std::endl;
+              
     std::map<std::string, std::string> response;
     response["success"] = "true";
     response["effect"] = effectName;
     response["intensity"] = std::to_string(params.intensity);
     response["radius"] = std::to_string(params.radius);
     response["pixelSize"] = std::to_string(params.pixelSize);
+    response["note"] = "Effect processing moved to frontend";
+    
     if (webSocketServer) {
         webSocketServer->emitToClient(hdl, "effect-changed", response);
     }
@@ -396,38 +401,35 @@ void PhotoBoothServer::handleGetEffectEvent(connection_hdl hdl) {
 }
 
 void PhotoBoothServer::handleApplyEffectEvent(connection_hdl hdl, const std::map<std::string, std::string>& data) {
-    std::cout << "🎨 Received apply-effect event from client" << std::endl;
+    std::cout << "📝 NOTE: handleApplyEffectEvent called - effects moved to frontend" << std::endl;
     std::cout << "📋 Received data: ";
     for (const auto& pair : data) {
         std::cout << pair.first << "=" << pair.second << " ";
     }
     std::cout << std::endl;
+    
     auto effectIt = data.find("effect");
     if (effectIt == data.end()) {
         std::cout << "❌ No effect name provided in apply-effect request" << std::endl;
         std::map<std::string, std::string> response;
         response["success"] = "false";
         response["error"] = "Invalid effect name";
+        response["note"] = "Effect processing moved to frontend";
         if (webSocketServer) {
             webSocketServer->emitToClient(hdl, "effect-applied", response);
         }
         return;
     }
+    
     std::string effectName = effectIt->second;
-    std::cout << "🎯 Effect to apply: " << effectName << std::endl;
-    EffectType effect = EffectType::NONE;
-    if (effectName == "fisheye") effect = EffectType::FISHEYE;
-    else if (effectName == "grayscale") effect = EffectType::GRAYSCALE;
-    else if (effectName == "sepia") effect = EffectType::SEPIA;
-    else if (effectName == "vignette") effect = EffectType::VIGNETTE;
-    else if (effectName == "blur") effect = EffectType::BLUR;
-    else if (effectName == "sharpen") effect = EffectType::SHARPEN;
-    else if (effectName == "invert") effect = EffectType::INVERT;
-    else if (effectName == "pixelate") effect = EffectType::PIXELATE;
+    std::cout << "📝 NOTE: Effect " << effectName << " requested but processing moved to frontend" << std::endl;
+    
+    // Parse parameters for compatibility
     EffectParams params;
     params.intensity = 0.5;
     params.radius = 1.0;
     params.pixelSize = 10;
+    
     auto pIntensityIt2 = data.find("params.intensity");
     if (pIntensityIt2 != data.end()) {
         try { params.intensity = std::stod(pIntensityIt2->second); if (params.intensity < 0) params.intensity = 0; if (params.intensity > 1) params.intensity = 1; } catch (...) {}
@@ -440,6 +442,8 @@ void PhotoBoothServer::handleApplyEffectEvent(connection_hdl hdl, const std::map
     if (pPixelSizeIt2 != data.end()) {
         try { params.pixelSize = std::stoi(pPixelSizeIt2->second); if (params.pixelSize < 1) params.pixelSize = 1; } catch (...) {}
     }
+    
+    // Parse JSON params string if present
     auto paramsIt = data.find("params");
     if (paramsIt != data.end()) {
         std::string paramsStr = paramsIt->second;
@@ -480,6 +484,7 @@ void PhotoBoothServer::handleApplyEffectEvent(connection_hdl hdl, const std::map
             }
         }
     }
+    
     auto intensityIt = data.find("intensity");
     if (intensityIt != data.end()) {
         try { params.intensity = std::stod(intensityIt->second); if (params.intensity < 0) params.intensity = 0; if (params.intensity > 1) params.intensity = 1; } catch (...) {}
@@ -492,72 +497,47 @@ void PhotoBoothServer::handleApplyEffectEvent(connection_hdl hdl, const std::map
     if (pixelSizeIt != data.end()) {
         try { params.pixelSize = std::stoi(pixelSizeIt->second); if (params.pixelSize < 1) params.pixelSize = 1; } catch (...) {}
     }
-    std::cout << "🎨 Applying effect with effect=" << effectName
-              << ", intensity=" << params.intensity
-              << ", radius=" << params.radius
-              << ", pixelSize=" << params.pixelSize << std::endl;
     
-    // Apply effect to MJPEG stream and GPhoto wrapper
-    mjpegServer->setEffect(effect, params);
-    gphoto->setEffect(effect, params);
+    std::cout << "📝 NOTE: Effect " << effectName << " with params: intensity=" << params.intensity
+              << ", radius=" << params.radius << ", pixelSize=" << params.pixelSize << " - processing moved to frontend" << std::endl;
     
-    // Check if we need to apply effect to current photo
+    // NOTE: Effects are now processed in frontend, but we keep NONE for backward compatibility
+    mjpegServer->setEffect(EffectType::NONE, params);
+    gphoto->setEffect(EffectType::NONE, params);
+    
+    // Check if client is asking for current photo processing
     auto currentPhotoIt = data.find("currentPhoto");
     if (currentPhotoIt != data.end() && currentPhotoIt->second == "true") {
-        std::cout << "🖼️ Applying effect to current photo" << std::endl;
+        std::cout << "📝 NOTE: Current photo effect requested but processing moved to frontend" << std::endl;
         
-        // Get the current photo filename from the client
         auto filenameIt = data.find("filename");
         if (filenameIt != data.end()) {
             std::string filename = filenameIt->second;
-            std::cout << "📁 Processing photo file: " << filename << std::endl;
+            std::cout << "📁 Photo file: " << filename << " - effects now processed in frontend" << std::endl;
             
-            // Apply effect to the photo file
-            std::string filePath = "uploads/" + filename;
-            std::vector<unsigned char> imageData = gphoto->readImageFile(filePath);
+            // Notify client that effect processing has moved to frontend
+            std::map<std::string, std::string> photoUpdateResponse;
+            photoUpdateResponse["success"] = "false";
+            photoUpdateResponse["filename"] = filename;
+            photoUpdateResponse["effect"] = effectName;
+            photoUpdateResponse["message"] = "Effect processing moved to frontend";
+            photoUpdateResponse["note"] = "Please use frontend Canvas API for effect processing";
             
-            if (!imageData.empty()) {
-                // Apply the effect using ImageEffects
-                ImageEffects imageEffects;
-                imageEffects.setEffect(effect, params);
-                std::vector<unsigned char> processedImageData = imageEffects.applyEffect(imageData);
-                
-                if (!processedImageData.empty()) {
-                    // Save the processed image back to the file
-                    if (gphoto->writeImageFile(filePath, processedImageData)) {
-                        std::cout << "✅ Effect applied to current photo successfully" << std::endl;
-                        
-                        // Notify client that the photo has been updated
-                        std::map<std::string, std::string> photoUpdateResponse;
-                        photoUpdateResponse["success"] = "true";
-                        photoUpdateResponse["filename"] = filename;
-                        photoUpdateResponse["effect"] = effectName;
-                        photoUpdateResponse["message"] = "Photo updated with effect";
-                        
-                        if (webSocketServer) {
-                            webSocketServer->emitToClient(hdl, "photo-effect-applied", photoUpdateResponse);
-                        }
-                    } else {
-                        std::cout << "❌ Failed to save processed image" << std::endl;
-                    }
-                } else {
-                    std::cout << "❌ Failed to apply effect to image data" << std::endl;
-                }
-            } else {
-                std::cout << "❌ Failed to read image file: " << filePath << std::endl;
+            if (webSocketServer) {
+                webSocketServer->emitToClient(hdl, "photo-effect-applied", photoUpdateResponse);
             }
-        } else {
-            std::cout << "⚠️ No filename provided for current photo" << std::endl;
         }
     }
     
-    std::cout << "✅ Effect " << effectName << " applied to MJPEG stream and GPhoto wrapper" << std::endl;
+    std::cout << "📝 NOTE: Effect " << effectName << " request completed - processing moved to frontend" << std::endl;
     std::map<std::string, std::string> response;
     response["success"] = "true";
     response["effect"] = effectName;
     response["intensity"] = std::to_string(params.intensity);
     response["radius"] = std::to_string(params.radius);
     response["pixelSize"] = std::to_string(params.pixelSize);
+    response["note"] = "Effect processing moved to frontend";
+    
     if (webSocketServer) {
         webSocketServer->emitToClient(hdl, "effect-applied", response);
     }
