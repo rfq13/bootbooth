@@ -52,6 +52,7 @@ func withRateLimit(next http.Handler) http.Handler {
 }
 
 func withCORS(next http.Handler) http.Handler {
+    l := jsonLogger{}
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         origins := os.Getenv("FRONTEND_ORIGIN")
         originList := strings.Split(origins, ",")
@@ -68,6 +69,16 @@ func withCORS(next http.Handler) http.Handler {
             }
         }
         if origin == "" { origin = "*" }
+        
+        // Log CORS origin untuk debugging
+        l.Println(map[string]any{
+            "event": "cors_origin_set",
+            "method": r.Method,
+            "path": r.URL.Path,
+            "request_origin": r.Header.Get("Origin"),
+            "allowed_origins_env": origins,
+            "final_origin": origin,
+        })
         w.Header().Set("Access-Control-Allow-Origin", origin)
         w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
         w.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-CSRF-Token")

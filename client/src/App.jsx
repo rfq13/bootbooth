@@ -10,11 +10,6 @@ import { appState } from "./main.jsx";
 import { WS_URL, API_URL, BACKOFFICE_SOCKET_URL } from "./constants";
 import io from "socket.io-client";
 
-// Lazy loaded components untuk code splitting
-const OptimizedTemplateEditor = lazy(() =>
-  import("./components/OptimizedTemplateEditor.jsx")
-);
-
 // Loading component untuk lazy loading
 const EditorLoading = () => (
   <div className="min-h-screen bg-gradient-to-br from-primary-100 via-primary-50 to-white flex items-center justify-center">

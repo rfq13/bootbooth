@@ -1,71 +1,8 @@
-import { useState, Suspense, lazy } from "preact/compat";
+import { Suspense, lazy } from "preact/compat";
 import { Router, Route } from "preact-router";
 
 // Lazy loaded components untuk code splitting
-const OptimizedTemplateEditor = lazy(() =>
-  import("./OptimizedTemplateEditor.jsx")
-);
 const App = lazy(() => import("../App.jsx"));
-
-// Loading component untuk lazy loading
-const EditorLoading = () => (
-  <div className="min-h-screen bg-gradient-to-br from-primary-100 via-primary-50 to-white flex items-center justify-center">
-    <div className="text-center">
-      <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full mb-4 shadow-lg animate-glow">
-        <svg
-          className="w-8 h-8 text-white animate-spin"
-          fill="currentColor"
-          viewBox="0 0 20 20"
-        >
-          <path
-            fillRule="evenodd"
-            d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zm1 14a1 1 0 100-2 1 1 0 000 2zm5-1.757l4.9-4.9a2 2 0 000-2.828L13.485 5.1a2 2 0 00-2.828 0L10 5.757v8.486zM16 18H9.071l6-6H16a2 2 0 012 2v2a2 2 0 01-2 2z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </div>
-      <h2 className="text-2xl font-bold text-secondary-900 mb-2">
-        Memuat Editor...
-      </h2>
-      <p className="text-secondary-600">Sedang menyiapkan tools editing foto</p>
-    </div>
-  </div>
-);
-
-// Error boundary component untuk lazy loading
-const EditorError = ({ error, onRetry }) => (
-  <div className="min-h-screen bg-gradient-to-br from-primary-100 via-primary-50 to-white flex items-center justify-center">
-    <div className="bg-white/85 backdrop-blur-md rounded-3xl p-8 shadow-soft-lg border border-primary-200 max-w-md">
-      <div className="text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-4">
-          <svg
-            className="w-8 h-8 text-red-600"
-            fill="currentColor"
-            viewBox="0 0 20 20"
-          >
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-              clipRule="evenodd"
-            />
-          </svg>
-        </div>
-        <h2 className="text-2xl font-bold text-secondary-900 mb-2">
-          Editor Error
-        </h2>
-        <p className="text-secondary-600 mb-4">
-          {error?.message || "Terjadi kesalahan saat memuat editor"}
-        </p>
-        <button
-          onClick={onRetry}
-          className="btn-gradient px-6 py-2 rounded-xl text-white font-medium transition-all shadow-soft hover:shadow-soft-lg"
-        >
-          Coba Lagi
-        </button>
-      </div>
-    </div>
-  </div>
-);
 
 // Home component (dipindahkan dari App.jsx)
 function Home() {
@@ -108,14 +45,6 @@ function Home() {
             modern photobooth solution. Perfect for creating memorable moments
             with style.
           </p>
-          <div className="mt-6 flex justify-center">
-            <button
-              onClick={() => (window.location.hash = "#/editor")}
-              className="btn-gradient"
-            >
-              Buka Photo Editor
-            </button>
-          </div>
         </header>
       </div>
     </div>
@@ -124,36 +53,34 @@ function Home() {
 
 // Router component untuk handle routing dengan lazy loading
 export default function AppRouter() {
-  const [editorError, setEditorError] = useState(null);
-  const [retryKey, setRetryKey] = useState(0);
-
-  const handleEditorError = (error) => {
-    setEditorError(error);
-  };
-
-  const handleRetry = () => {
-    setEditorError(null);
-    setRetryKey((prev) => prev + 1);
-  };
-
   return (
-    <Suspense fallback={<EditorLoading />}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-primary-100 via-primary-50 to-white flex items-center justify-center">
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full mb-4 shadow-lg animate-glow">
+              <svg
+                className="w-8 h-8 text-white animate-spin"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zm1 14a1 1 0 100-2 1 1 0 000 2zm5-1.757l4.9-4.9a2 2 0 000-2.828L13.485 5.1a2 2 0 00-2.828 0L10 5.757v8.486zM16 18H9.071l6-6H16a2 2 0 012 2v2a2 2 0 01-2 2z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-secondary-900 mb-2">
+              Memuat Aplikasi...
+            </h2>
+            <p className="text-secondary-600">Sedang menyiapkan photobooth</p>
+          </div>
+        </div>
+      }
+    >
       <Router>
         <Route path="/" component={App} />
-        <Route
-          path="/editor"
-          component={(props) => {
-            return editorError ? (
-              <EditorError error={editorError} onRetry={handleRetry} />
-            ) : (
-              <OptimizedTemplateEditor
-                key={retryKey}
-                {...props}
-                onError={handleEditorError}
-              />
-            );
-          }}
-        />
       </Router>
     </Suspense>
   );
