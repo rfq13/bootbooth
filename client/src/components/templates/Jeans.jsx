@@ -80,6 +80,7 @@ export default function Jeans({ photos = [], domRef, onClickSlot }) {
                 src={photos[i]}
                 alt={`Jeans-${i + 1}`}
                 className="w-full h-full object-cover"
+                crossOrigin="anonymous"
               />
             ) : (
               // Placeholder jelas untuk konten utama

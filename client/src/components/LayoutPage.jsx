@@ -14,6 +14,9 @@ const LayoutPage = ({ onBack }) => {
 
   // Template selection state
   const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [is2RCombined, setIs2RCombined] = useState(false);
+  const [selectedSecondTemplate, setSelectedSecondTemplate] = useState(null);
+  const [useSingle2R, setUseSingle2R] = useState(false);
 
   // Photo placement state
   const [slotPhotos, setSlotPhotos] = useState([null, null, null]);
@@ -43,6 +46,7 @@ const LayoutPage = ({ onBack }) => {
       preview: "🎬",
       color: "from-blue-500 to-purple-600",
       requiredPhotos: 3,
+      type: "4R",
       settings: {
         eventName: true,
         date: true,
@@ -52,12 +56,13 @@ const LayoutPage = ({ onBack }) => {
       },
     },
     {
-      id: "strip",
-      name: "Photo Strip",
+      id: "yedam",
+      name: "Yedam Photo Strip",
       description: "Strip foto BYD style",
       preview: "📸",
       color: "from-pink-500 to-rose-600",
       requiredPhotos: 3,
+      type: "2R",
       settings: {
         eventName: false,
         date: false,
@@ -73,6 +78,7 @@ const LayoutPage = ({ onBack }) => {
       preview: "🖼️",
       color: "from-green-500 to-teal-600",
       requiredPhotos: 4,
+      type: "4R",
       settings: {
         eventName: false,
         date: false,
@@ -88,6 +94,7 @@ const LayoutPage = ({ onBack }) => {
       preview: "🎞️",
       color: "from-orange-500 to-red-600",
       requiredPhotos: 6,
+      type: "4R",
       settings: {
         eventName: false,
         date: false,
@@ -103,6 +110,7 @@ const LayoutPage = ({ onBack }) => {
       preview: "🖼️",
       color: "from-indigo-500 to-blue-600",
       requiredPhotos: 6,
+      type: "4R",
       settings: {
         eventName: false,
         date: false,
@@ -118,6 +126,7 @@ const LayoutPage = ({ onBack }) => {
       preview: "🖼️",
       color: "from-yellow-500 to-orange-600",
       requiredPhotos: 6,
+      type: "4R",
       settings: {
         eventName: false,
         date: false,
@@ -133,6 +142,7 @@ const LayoutPage = ({ onBack }) => {
       preview: "▶️",
       color: "from-red-600 to-gray-700",
       requiredPhotos: 6,
+      type: "4R",
       settings: {
         eventName: false,
         date: false,
@@ -148,6 +158,7 @@ const LayoutPage = ({ onBack }) => {
       preview: "📷",
       color: "from-pink-500 to-yellow-400",
       requiredPhotos: 6,
+      type: "4R",
       settings: {
         eventName: false,
         date: false,
@@ -163,6 +174,23 @@ const LayoutPage = ({ onBack }) => {
       preview: "🕷️",
       color: "from-red-600 to-blue-600",
       requiredPhotos: 3,
+      type: "2R",
+      settings: {
+        eventName: false,
+        date: false,
+        time: false,
+        row: false,
+        seat: false,
+      },
+    },
+    {
+      id: "love4r",
+      name: "Love 4R",
+      description: "6 foto dengan frame bentuk hati (love)",
+      preview: "❤️",
+      color: "from-pink-400 to-red-500",
+      requiredPhotos: 6,
+      type: "4R",
       settings: {
         eventName: false,
         date: false,
@@ -179,7 +207,15 @@ const LayoutPage = ({ onBack }) => {
 
   useEffect(() => {
     if (selectedTemplate) {
-      const count = selectedTemplate.requiredPhotos;
+      let count = selectedTemplate.requiredPhotos;
+
+      // If using combined 2R templates, double the required photos
+      if (is2RCombined && selectedSecondTemplate) {
+        count =
+          selectedTemplate.requiredPhotos +
+          selectedSecondTemplate.requiredPhotos;
+      }
+
       setSlotPhotos((prev) => {
         const next = [...prev];
         if (next.length < count) {
@@ -190,7 +226,7 @@ const LayoutPage = ({ onBack }) => {
         return next;
       });
     }
-  }, [selectedTemplate]);
+  }, [selectedTemplate, is2RCombined, selectedSecondTemplate]);
 
   const loadPhotos = async () => {
     try {
@@ -218,10 +254,38 @@ const LayoutPage = ({ onBack }) => {
 
   const handleSelectTemplate = (template) => {
     setSelectedTemplate(template);
+    // Reset 2R combination states when selecting a new template
+    setIs2RCombined(false);
+    setSelectedSecondTemplate(null);
+    setUseSingle2R(false);
+  };
+
+  const handleSelectSecondTemplate = (template) => {
+    setSelectedSecondTemplate(template);
+  };
+
+  const handle2RCombinationChoice = (choice) => {
+    if (choice === "single") {
+      setUseSingle2R(true);
+      setIs2RCombined(false);
+      setSelectedSecondTemplate(null);
+    } else if (choice === "combine") {
+      setUseSingle2R(false);
+      setIs2RCombined(true);
+    }
   };
 
   const handleContinueToPhotoPlacement = () => {
     if (selectedTemplate) {
+      // For 2R templates, check if user has made a choice
+      if (selectedTemplate.type === "2R" && !useSingle2R && !is2RCombined) {
+        // Don't continue yet, user needs to choose single or combined
+        return;
+      }
+      // For combined 2R, check if second template is selected
+      if (is2RCombined && !selectedSecondTemplate) {
+        return;
+      }
       setCurrentStep(2);
     }
   };
@@ -229,13 +293,23 @@ const LayoutPage = ({ onBack }) => {
   const handleBackToTemplateSelection = () => {
     setCurrentStep(1);
     setSelectedTemplate(null);
+    setSelectedSecondTemplate(null);
+    setIs2RCombined(false);
+    setUseSingle2R(false);
     setSlotPhotos([null, null, null]);
   };
 
   const handleProceedToPrint = async (layoutRef) => {
     if (!selectedTemplate) return;
 
-    const requiredSlots = selectedTemplate.requiredPhotos;
+    let requiredSlots = selectedTemplate.requiredPhotos;
+
+    // Calculate required slots for combined 2R templates
+    if (is2RCombined && selectedSecondTemplate) {
+      requiredSlots =
+        selectedTemplate.requiredPhotos + selectedSecondTemplate.requiredPhotos;
+    }
+
     const filled = slotPhotos.filter(Boolean).length;
     if (filled < requiredSlots) {
       notify(
@@ -247,15 +321,63 @@ const LayoutPage = ({ onBack }) => {
     try {
       const { toPng } = await import("html-to-image");
       if (!layoutRef.current) return;
+
+      // Wait for all images to load before capturing
+      const images = layoutRef.current.querySelectorAll("img");
+      await Promise.all(
+        Array.from(images).map((img) => {
+          if (img.complete && img.naturalHeight !== 0) {
+            return Promise.resolve();
+          }
+          return new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            // Set a timeout to avoid hanging forever
+            setTimeout(() => resolve(), 3000);
+          });
+        })
+      );
+
+      // Small delay to ensure rendering is complete
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Determine background color based on template type
+      // let backgroundColor = "#ffffff";
+      // if (selectedTemplate.id === "ticket") {
+      //   backgroundColor = "#4a7ba7";
+      // } else if (selectedTemplate.id === "spiderMan") {
+      //   backgroundColor = "#dc2626";
+      // } else if (is2RCombined && selectedSecondTemplate?.id === "ticket") {
+      //   backgroundColor = "#4a7ba7";
+      // } else if (is2RCombined && selectedSecondTemplate?.id === "spiderMan") {
+      //   backgroundColor = "#dc2626";
+      // }
+
       const dataUrl = await toPng(layoutRef.current, {
         quality: 0.95,
         pixelRatio: 3,
-        backgroundColor:
-          selectedTemplate.id === "ticket" ? "#4a7ba7" : "#ffffff",
+        // backgroundColor: backgroundColor,
+        filter: (node) => {
+          // Only exclude script tags, include all images
+          return node.tagName !== "SCRIPT";
+        },
+        // Add CORS handling for external images
+        cacheBust: true,
+        includeQueryParams: true,
+        // Increase timeout for complex layouts
+        timeout: 10000,
       });
+
+      // Generate filename based on template configuration
+      let filename = `layout-${selectedTemplate.id}`;
+      if (is2RCombined && selectedSecondTemplate) {
+        filename += `-${selectedSecondTemplate.id}`;
+      }
+      filename += `-${Date.now()}.png`;
+
       const link = document.createElement("a");
       link.href = dataUrl;
-      link.download = `layout-${selectedTemplate.id}-${Date.now()}.png`;
+      link.download = filename;
       link.click();
       notify("success", "Layout berhasil diekspor sebagai gambar!");
     } catch (error) {
@@ -370,6 +492,11 @@ const LayoutPage = ({ onBack }) => {
                 onSelectTemplate={handleSelectTemplate}
                 onContinue={handleContinueToPhotoPlacement}
                 onBack={onBack}
+                is2RCombined={is2RCombined}
+                selectedSecondTemplate={selectedSecondTemplate}
+                onSelectSecondTemplate={handleSelectSecondTemplate}
+                on2RCombinationChoice={handle2RCombinationChoice}
+                useSingle2R={useSingle2R}
               />
 
               <TemplateSettings
@@ -406,6 +533,9 @@ const LayoutPage = ({ onBack }) => {
                 showVirtualKeyboard={showVirtualKeyboard}
                 hideVirtualKeyboard={hideVirtualKeyboard}
                 currentEditingIndex={currentEditingIndex}
+                is2RCombined={is2RCombined}
+                selectedSecondTemplate={selectedSecondTemplate}
+                useSingle2R={useSingle2R}
               />
             </div>
           )}

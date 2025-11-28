@@ -1,16 +1,26 @@
 import { useRef, useEffect } from "react";
+import spidermantopleft from "../../../assets/spiderman/spiderman-top-left.png";
+import spidermanphotofirst from "../../../assets/spiderman/spiderman-photo-1.png";
+import spidermanphotosecondtopleft from "../../../assets/spiderman/spiderman-photo-2-top-left.png";
+import spidermanphotothirdbottomleft from "../../../assets/spiderman/spiderman-photo-3-bottom-left.png";
+import spidermanphotothirdthbottomright from "../../../assets/spiderman/spiderman-photo-3-bottom-right.png";
+import jaringtopleft from "../../../assets/spiderman/jaring-top-left.png";
+
+import texture from "../../../assets/spiderman/texture.jpg";
+import footer from "../../../assets/spiderman/footer.png";
+import footerAmazing from "../../../assets/spiderman/footer-amazing.png";
 
 const SpiderMan = ({ photos, domRef, onClickSlot }) => {
   const spiderRef = useRef(null);
 
   useEffect(() => {
     const styleId = "spider-man-print-styles";
+    const fontLinkId = "spider-man-fonts";
+
     if (!document.getElementById(styleId)) {
       const style = document.createElement("style");
       style.id = styleId;
       style.textContent = `
-        @import url('https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Bangers&display=swap');
-        
         .brush-stroke-frame {
           position: relative;
           background-color: white;
@@ -18,7 +28,7 @@ const SpiderMan = ({ photos, domRef, onClickSlot }) => {
           border-radius: 40% 10% 30% 20% / 10% 40% 20% 30%;
           transform: rotate(-2deg);
           overflow: hidden;
-          box-shadow: 
+          box-shadow:
             0 0 0 4px #FCA5A5,
             0 0 0 8px #EF4444,
             0 0 0 12px #DC2626,
@@ -49,11 +59,11 @@ const SpiderMan = ({ photos, domRef, onClickSlot }) => {
         }
         
         .font-spiderman-name {
-          font-family: 'Permanent Marker', cursive;
+          font-family: 'Permanent Marker', cursive, Arial, sans-serif;
         }
         
         .font-spiderman-title {
-          font-family: 'Bangers', cursive;
+          font-family: 'Bangers', cursive, Impact, sans-serif;
         }
         
         .placeholder-background {
@@ -84,20 +94,30 @@ const SpiderMan = ({ photos, domRef, onClickSlot }) => {
       `;
       document.head.appendChild(style);
     }
+
+    // Add fonts separately to avoid CSS rules access issues
+    if (!document.getElementById(fontLinkId)) {
+      const link = document.createElement("link");
+      link.id = fontLinkId;
+      link.href =
+        "https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Bangers&display=swap";
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+    }
   }, []);
 
   return (
-    <div className="flex flex-col items-center gap-6 relative overflow-hidden">
-      <div
-        ref={domRef || spiderRef}
-        className="relative"
-        style={{
-          width: "320px",
-          height: "90vh",
-          maxHeight: "1000px",
-        }}
-      >
-        <div className="w-full h-full bg-red-700 shadow-2xl relative overflow-hidden p-6 rounded-xl">
+    <div className="flex flex-col items-center gap-6 relative overflow-hidden h-full">
+      <div ref={domRef || spiderRef} className="relative w-[300px] h-[900px]">
+        <div
+          className="w-full h-full shadow-2xl relative overflow-hidden p-6"
+          style={{
+            backgroundImage: `url(${texture})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+          }}
+        >
           {/* Top right badge */}
           <div className="absolute top-4 right-4 bg-red-400 border-2 border-white transform -skew-x-6 p-1.5 shadow-lg z-20">
             <span className="block text-xs font-sans text-white uppercase tracking-wider font-bold">
@@ -110,7 +130,7 @@ const SpiderMan = ({ photos, domRef, onClickSlot }) => {
 
           {/* Top left Spider-Man */}
           <img
-            src="https://www.pngall.com/wp-content/uploads/17/Chibi-Spider-Man-Dynamic-Expression-PNG.png"
+            src={spidermantopleft}
             alt="Chibi Spider-Man Hanging"
             className="absolute top-0 left-0 transform -translate-x-1 translate-y-2 rotate-12 w-20 h-20 object-contain z-30"
           />
@@ -120,7 +140,7 @@ const SpiderMan = ({ photos, domRef, onClickSlot }) => {
             <div className="h-48 relative z-10 brush-stroke-frame">
               <div className="placeholder-background"></div>
               <div
-                className="relative z-10 cursor-pointer"
+                className="relative z-10 cursor-pointer h-full"
                 onClick={() => onClickSlot && onClickSlot(0)}
               >
                 {photos[0] ? (
@@ -128,6 +148,7 @@ const SpiderMan = ({ photos, domRef, onClickSlot }) => {
                     src={photos[0]}
                     alt="Photo 1"
                     className="w-full h-full object-cover rounded scale-110"
+                    crossOrigin="anonymous"
                   />
                 ) : (
                   <div className="text-center">
@@ -137,19 +158,24 @@ const SpiderMan = ({ photos, domRef, onClickSlot }) => {
                     <p className="text-gray-500 text-sm">(Pemandangan)</p>
                   </div>
                 )}
+                <img
+                  src={jaringtopleft}
+                  alt="Jaring Spiderman"
+                  className="absolute -top-12 -left-2 transform translate-y-1/2 size-24 object-contain z-20"
+                />
+                <img
+                  src={spidermanphotofirst}
+                  alt="Chibi Spider-Man Peeking"
+                  className="absolute bottom-[30px] right-2 transform translate-y-1/2 size-24 object-contain z-20"
+                />
               </div>
-              <img
-                src="https://www.pngall.com/wp-content/uploads/17/Chibi-Spider-Man-Dynamic-Pose-PNG.png"
-                alt="Chibi Spider-Man Peeking"
-                className="absolute bottom-[-10px] right-2 transform translate-y-1/2 w-16 h-16 object-contain z-20"
-              />
             </div>
 
             {/* Photo 2 */}
             <div className="h-48 relative z-10 brush-stroke-frame">
               <div className="placeholder-background"></div>
               <div
-                className="relative z-10 cursor-pointer"
+                className="relative z-10 cursor-pointer h-full"
                 onClick={() => onClickSlot && onClickSlot(1)}
               >
                 {photos[1] ? (
@@ -157,6 +183,7 @@ const SpiderMan = ({ photos, domRef, onClickSlot }) => {
                     src={photos[1]}
                     alt="Photo 2"
                     className="w-full h-full object-cover rounded scale-110"
+                    crossOrigin="anonymous"
                   />
                 ) : (
                   <div className="text-center">
@@ -167,15 +194,13 @@ const SpiderMan = ({ photos, domRef, onClickSlot }) => {
                   </div>
                 )}
               </div>
-              <div className="absolute top-2 left-[-10px] w-12 h-16 bg-yellow-400 border-2 border-red-900 transform -rotate-8 shadow-md flex justify-center items-center z-20">
-                <img
-                  src="https://pngimg.com/d/spider_man_PNG76.png"
-                  alt="Comic Panel"
-                  className="w-10 h-14 object-cover"
-                />
-              </div>
-              <div className="absolute bottom-2 left-4 bg-white border-2 border-black rounded-full px-3 py-1 text-xs font-bold transform -skew-x-12 z-20">
-                DUDE.
+              <img
+                src={spidermanphotosecondtopleft}
+                alt="Comic Panel"
+                className="size-20 object-cover absolute top-2 z-20"
+              />
+              <div className="absolute -top-1 left-12 bg-white border-2 border-black rounded-full px-3 py-1 text-xs font-bold transform -skew-x-12 z-20">
+                I'm coming'!
               </div>
             </div>
 
@@ -183,7 +208,7 @@ const SpiderMan = ({ photos, domRef, onClickSlot }) => {
             <div className="h-48 relative z-10 brush-stroke-frame">
               <div className="placeholder-background"></div>
               <div
-                className="relative z-10 cursor-pointer"
+                className="relative z-10 cursor-pointer h-full"
                 onClick={() => onClickSlot && onClickSlot(2)}
               >
                 {photos[2] ? (
@@ -191,6 +216,7 @@ const SpiderMan = ({ photos, domRef, onClickSlot }) => {
                     src={photos[2]}
                     alt="Photo 3"
                     className="w-full h-full object-cover rounded scale-110"
+                    crossOrigin="anonymous"
                   />
                 ) : (
                   <div className="text-center">
@@ -202,7 +228,7 @@ const SpiderMan = ({ photos, domRef, onClickSlot }) => {
                 )}
               </div>
               <img
-                src="https://www.pikpng.com/pngl/b/150-1504109_chibi-spiderman-png-spider-man-em-chibi-clipart.png"
+                src={spidermanphotothirdbottomleft}
                 alt="Chibi Mask"
                 className="absolute bottom-2 left-2 w-12 h-12 object-contain z-20"
               />
@@ -210,7 +236,7 @@ const SpiderMan = ({ photos, domRef, onClickSlot }) => {
                 !!!
               </div>
               <img
-                src="https://www.pngall.com/wp-content/uploads/17/Chibi-Spider-Man-Character-Pose-PNG.png"
+                src={spidermanphotothirdthbottomright}
                 alt="Chibi Spider-Man Standing"
                 className="absolute bottom-0 right-2 w-16 h-16 object-contain z-20"
               />
@@ -218,13 +244,25 @@ const SpiderMan = ({ photos, domRef, onClickSlot }) => {
           </div>
 
           {/* Bottom text */}
-          <div className="absolute bottom-4 left-0 right-0 text-center z-20">
-            <p className="text-white text-sm font-semibold mb-1 tracking-widest">
+          <div className="absolute -bottom-4 left-0 right-0 text-center z-20">
+            {/* <p className="text-white text-sm font-semibold mb-1 tracking-widest">
               MARVEL
             </p>
             <h1 className="text-white text-5xl font-spiderman-title tracking-widest leading-none">
               SPIDER-MAN
-            </h1>
+            </h1> */}
+            <img
+              src={footer}
+              alt="Spider-Man Footer"
+              className="mx-auto size-44 object-contain z-20"
+            />
+          </div>
+          <div className="absolute bottom-12 -left-32 right-0 text-center z-20">
+            <img
+              src={footerAmazing}
+              alt="Spider-Man Footer"
+              className="mx-auto size-24 object-contain z-20"
+            />
           </div>
         </div>
       </div>

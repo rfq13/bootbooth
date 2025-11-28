@@ -250,7 +250,7 @@ export default function YouTube4R({
   return (
     <div
       ref={domRef}
-      className="relative w-[600px] h-[900px] bg-[#0f0f0f] text-white border border-gray-700 rounded-2xl shadow-2xl overflow-hidden font-sans"
+      className="relative w-[600px] h-[900px] bg-[#0f0f0f] text-white border border-gray-700 shadow-2xl overflow-hidden font-sans"
     >
       {/* Header: Logo, Search Bar, dan Ikon Profil */}
       <div className="flex items-center justify-between gap-4 px-4 h-14 border-b border-gray-700">
@@ -314,6 +314,7 @@ export default function YouTube4R({
                       src={photos[i]}
                       alt={`video-${i + 1}`}
                       className="w-full h-full object-cover"
+                      crossOrigin="anonymous"
                     />
                   ) : (
                     <div className="w-full h-full grid place-items-center text-gray-400 text-sm">
@@ -342,7 +343,7 @@ export default function YouTube4R({
                       />
                     ) : (
                       <div
-                        className="text-sm font-medium leading-snug line-clamp-2 cursor-text hover:bg-gray-800 px-1 py-0.5 rounded"
+                        className="text-sm font-medium leading-snug line-clamp-2 cursor-text hover:bg-gray-800 py-0.5 rounded"
                         onClick={() => startEditing(i)}
                         style={{ userSelect: "text" }}
                       >

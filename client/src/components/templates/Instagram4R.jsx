@@ -221,25 +221,33 @@ export default function Instagram4R({
     >
       <div className="h-14 px-4 flex items-center justify-between border-b border-gray-200 bg-white">
         {/* Logo */}
-        <img src="/assets/logo-ig.png" alt="Instagram" className="w-22 h-10" />
+        <img
+          src="/assets/logo-ig.png"
+          alt="Instagram"
+          className="w-22 h-10"
+          crossOrigin="anonymous"
+        />
         <div className="flex items-center gap-4">
           {/* Plus Icon */}
           <img
             src="/assets/instagram/Add.svg"
             alt="New post"
             className="w-6 h-6"
+            crossOrigin="anonymous"
           />
           {/* Heart Icon */}
           <img
             src="/assets/instagram/Like.svg"
             alt="Heart"
             className="size-6"
+            crossOrigin="anonymous"
           />
           {/* Messenger Icon */}
           <img
             src="/assets/instagram/Messenger.svg"
             alt="Messenger"
             className="size-6"
+            crossOrigin="anonymous"
           />
         </div>
       </div>
@@ -266,6 +274,7 @@ export default function Instagram4R({
                     src={photos[i]}
                     alt={`post-${i + 1}`}
                     className="w-full h-full object-cover"
+                    crossOrigin="anonymous"
                   />
                 ) : (
                   <div className="w-full h-full grid place-items-center text-gray-500 text-sm">
@@ -280,18 +289,21 @@ export default function Instagram4R({
                   src="/assets/instagram/Like.svg"
                   alt="Like"
                   className="size-6"
+                  crossOrigin="anonymous"
                 />
                 {/* Comment Icon */}
                 <img
                   src="/assets/instagram/Comment.svg"
                   alt="Comment"
                   className="size-6"
+                  crossOrigin="anonymous"
                 />
                 {/* Share Icon */}
                 <img
                   src="/assets/instagram/Share.svg"
                   alt="Share"
                   className="size-6"
+                  crossOrigin="anonymous"
                 />
                 <div className="flex-grow"></div>
                 {/* Save Icon */}
@@ -299,6 +311,7 @@ export default function Instagram4R({
                   src="/assets/instagram/Bookmark.svg"
                   alt="Save"
                   className="size-6"
+                  crossOrigin="anonymous"
                 />
               </div>
               <div className="px-3 pb-3 text-sm text-gray-800">
@@ -342,30 +355,35 @@ export default function Instagram4R({
             src="/assets/instagram/Home.svg"
             alt="Home"
             className="cursor-pointer size-7"
+            crossOrigin="anonymous"
           />
           {/* Search Icon */}
           <img
             src="/assets/instagram/Search.svg"
             alt="Search"
             className="cursor-pointer size-7"
+            crossOrigin="anonymous"
           />
           {/* Reels Icon */}
           <img
             src="/assets/instagram/reels.svg"
             alt="Reels"
             className="cursor-pointer size-6"
+            crossOrigin="anonymous"
           />
           {/* Plus Icon */}
           <img
             src="/assets/instagram/Add.svg"
             alt="Add"
             className="cursor-pointer size-7"
+            crossOrigin="anonymous"
           />
           {/* Profile Icon */}
           <img
             src="/assets/instagram/User.svg"
             alt="Profile"
             className="cursor-pointer size-7"
+            crossOrigin="anonymous"
           />
         </div>
       </div>

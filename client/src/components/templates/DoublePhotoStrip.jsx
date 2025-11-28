@@ -2,7 +2,10 @@ export default function DoublePhotoStrip({ photos = [], domRef, onClickSlot }) {
   const left = photos.slice(0, 3);
   const right = photos.slice(3, 6);
   return (
-    <div ref={domRef} className="flex w-[600px] h-[900px] bg-white p-3 gap-3 border border-primary-200 rounded-3xl">
+    <div
+      ref={domRef}
+      className="flex w-[600px] h-[900px] bg-white p-3 gap-3 border border-primary-200 rounded-3xl"
+    >
       <div
         className="flex flex-col flex-1 rounded-2xl overflow-hidden relative"
         style={{
@@ -25,15 +28,26 @@ export default function DoublePhotoStrip({ photos = [], domRef, onClickSlot }) {
               style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.2)" }}
             >
               {url ? (
-                <img src={url} alt={`L${i + 1}`} className="w-full h-full object-cover" />
+                <img
+                  src={url}
+                  alt={`L${i + 1}`}
+                  className="w-full h-full object-cover"
+                  crossOrigin="anonymous"
+                />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-secondary-700">Klik untuk pilih foto</div>
+                <div className="w-full h-full flex items-center justify-center text-secondary-700">
+                  Klik untuk pilih foto
+                </div>
               )}
-              <div className="absolute bottom-1 right-2 bg-black/50 text-white text-xs px-2 py-0.5 rounded">{i + 1}</div>
+              <div className="absolute bottom-1 right-2 bg-black/50 text-white text-xs px-2 py-0.5 rounded">
+                {i + 1}
+              </div>
             </div>
           ))}
         </div>
-        <div className="p-3 text-center font-black text-2xl text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-red-500 to-blue-500">TOY STORY</div>
+        <div className="p-3 text-center font-black text-2xl text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-red-500 to-blue-500">
+          TOY STORY
+        </div>
       </div>
       <div
         className="flex flex-col flex-1 rounded-2xl overflow-hidden relative"
@@ -56,15 +70,26 @@ export default function DoublePhotoStrip({ photos = [], domRef, onClickSlot }) {
               style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.2)" }}
             >
               {url ? (
-                <img src={url} alt={`R${i + 1}`} className="w-full h-full object-cover" />
+                <img
+                  src={url}
+                  alt={`R${i + 1}`}
+                  className="w-full h-full object-cover"
+                  crossOrigin="anonymous"
+                />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-secondary-700">Klik untuk pilih foto</div>
+                <div className="w-full h-full flex items-center justify-center text-secondary-700">
+                  Klik untuk pilih foto
+                </div>
               )}
-              <div className="absolute bottom-1 right-2 bg-black/50 text-white text-xs px-2 py-0.5 rounded">{i + 1}</div>
+              <div className="absolute bottom-1 right-2 bg-black/50 text-white text-xs px-2 py-0.5 rounded">
+                {i + 1}
+              </div>
             </div>
           ))}
         </div>
-        <div className="p-3 text-center font-black text-2xl text-transparent bg-clip-text bg-gradient-to-r from-blue-500 via-red-500 to-yellow-300">TOY STORY</div>
+        <div className="p-3 text-center font-black text-2xl text-transparent bg-clip-text bg-gradient-to-r from-blue-500 via-red-500 to-yellow-300">
+          TOY STORY
+        </div>
       </div>
     </div>
   );
