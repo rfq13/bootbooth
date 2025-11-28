@@ -119,19 +119,37 @@ export default function YouTube4R({
 
   // Fungsi untuk menangani perubahan judul video
   const handleTitleChange = (index, newTitle) => {
-    const updatedTitles = [...videoTitles];
-    updatedTitles[index] = newTitle;
-    setVideoTitles(updatedTitles);
+    console.log("handleTitleChange called:", index, newTitle);
+    setVideoTitles((currentTitles) => {
+      const updatedTitles = [...currentTitles];
+      updatedTitles[index] = newTitle;
+      return updatedTitles;
+    });
   };
 
   // Fungsi untuk memulai mode edit
   const startEditing = (index) => {
     setEditingIndex(index);
+    console.log(
+      "Starting editing for index:",
+      index,
+      "with title:",
+      videoTitles[index]
+    );
+
     // Tampilkan keyboard virtual dengan nilai saat ini
     showVirtualKeyboard(
       videoTitles[index],
       (newTitle) => {
-        handleTitleChange(index, newTitle);
+        console.log(
+          "Callback received new title:",
+          newTitle,
+          "for index:",
+          index
+        );
+        // Create a fake event object to unify the update logic
+        const fakeEvent = { target: { value: newTitle } };
+        handleInputChange(index, fakeEvent);
       },
       index
     );
@@ -173,17 +191,16 @@ export default function YouTube4R({
 
   const handleInputChange = (index, e) => {
     const newTitle = e.target.value;
+    console.log("handleInputChange (manual):", index, newTitle);
     handleTitleChange(index, newTitle);
 
-    // Update keyboard input hanya jika ini adalah field yang sedang aktif
-    if (editingIndex === index && showVirtualKeyboard) {
-      showVirtualKeyboard(
-        newTitle,
-        (updatedTitle) => {
-          handleTitleChange(index, updatedTitle);
-        },
-        index
-      );
+    // Update keyboard input jika ini adalah field yang sedang aktif
+    if (
+      editingIndex === index &&
+      window.keyboardMethods &&
+      window.keyboardMethods.setCurrentInput
+    ) {
+      window.keyboardMethods.setCurrentInput(newTitle);
     }
   };
 
@@ -213,6 +230,11 @@ export default function YouTube4R({
       setEditingIndex(null);
     }
   }, [currentEditingIndex, editingIndex]);
+
+  // Debug: Monitor videoTitles changes
+  useEffect(() => {
+    console.log("videoTitles updated:", videoTitles);
+  }, [videoTitles]);
 
   // Menyiapkan 6 slot untuk thumbnail video
   const slots = Array.from({ length: 6 }, (_, i) => i);

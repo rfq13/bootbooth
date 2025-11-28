@@ -2,6 +2,7 @@
 // Tidak menggunakan React hooks; kompatibel dengan Preact
 
 import yedamBottomRight from "../../../assets/yedam-bottom-right.png";
+import yedamBottomLeft from "../../../assets/yedam-bottom-left.png";
 const defaultIdolPhotoUrl = "https://picsum.photos/seed/kpop/200/300";
 
 export default function PhotoStrip({
@@ -51,7 +52,7 @@ export default function PhotoStrip({
         {ordered.slice(0, 3).map((url, index) => (
           <div
             key={index}
-            className="flex-grow bg-gray-100 border-2 border-dashed border-gray-300 relative overflow-hidden"
+            className="h-[220px] bg-gray-100 border-2 border-dashed border-gray-300 relative overflow-hidden"
             onClick={() => onClickSlot && onClickSlot(index)}
           >
             <div
@@ -98,11 +99,16 @@ export default function PhotoStrip({
           <span>Hey! {`I Love You`}</span>
           <span>02</span>
         </div>
-        <div className="flex justify-end items-end">
+        <div className="flex justify-between items-end h-[80px] w-full mt-4">
           <img
             src={yedamBottomRight}
             alt="Idol"
-            className="w-full h-full object-cover -mr-[43px]"
+            className=" w-[105px] h-[100px] object-cover -mr-[30px]"
+          />
+          <img
+            src={yedamBottomLeft}
+            alt="Idol"
+            className="w-auto h-[100px] object-cover -ml-[30px]"
           />
         </div>
       </div>

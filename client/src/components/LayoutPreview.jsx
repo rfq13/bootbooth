@@ -6,6 +6,7 @@ import FramedDoublePhotoStrip from "./templates/FramedDoublePhotoStrip";
 import Jeans from "./templates/Jeans";
 import YouTube4R from "./templates/YouTube4R";
 import Instagram4R from "./templates/Instagram4R";
+import SpiderMan from "./templates/SpiderMan";
 import { API_URL } from "../constants";
 
 const LayoutPreview = ({
@@ -121,6 +122,12 @@ const LayoutPreview = ({
           </div>
         ) : selectedTemplate?.id === "doubleStripFramed" ? (
           <FramedDoublePhotoStrip
+            photos={getPhotoUrls()}
+            domRef={layoutRef}
+            onClickSlot={onOpenSlotPicker}
+          />
+        ) : selectedTemplate?.id === "spiderMan" ? (
+          <SpiderMan
             photos={getPhotoUrls()}
             domRef={layoutRef}
             onClickSlot={onOpenSlotPicker}
