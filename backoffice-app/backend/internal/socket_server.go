@@ -35,6 +35,18 @@ func newSocketIOServer(booths *boothHub, hub *hub) (*socketio.Server, error) {
             "remote_addr": s.RemoteAddr().String(),
             "url": s.URL(),
         })
+        
+        // Send immediate acknowledgment to prevent timeout
+        s.Emit("connected", map[string]any{
+            "message": "Connection established",
+            "socket_id": s.ID(),
+        })
+        
+        l.Println(map[string]any{
+            "event": "socket_ack_sent",
+            "socket_id": s.ID(),
+        })
+        
         return nil
     })
     

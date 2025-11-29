@@ -397,7 +397,12 @@ export default function App() {
       boSocket.off("connect_error");
 
       boSocket.on("connect", () => {
+        console.log("✅ Socket connected successfully");
         doRegister();
+      });
+
+      boSocket.on("connected", (data) => {
+        console.log("✅ Server acknowledgment received:", data);
       });
 
       boSocket.on("registered", (data) => {
