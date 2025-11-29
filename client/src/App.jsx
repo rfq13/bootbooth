@@ -155,9 +155,9 @@ console.log(
 try {
   console.log({ BACKOFFICE_SOCKET_URL });
   boSocket = io(BACKOFFICE_SOCKET_URL, {
-    transports: ["polling"],
-    upgrade: false,
-    rememberUpgrade: false,
+    transports: ["polling", "websocket"],
+    upgrade: true,
+    rememberUpgrade: true,
     path: "/socket.io/",
     reconnection: true,
     reconnectionAttempts: 5,
