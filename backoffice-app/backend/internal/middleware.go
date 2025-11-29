@@ -24,11 +24,35 @@ func withLogging(next http.Handler) http.Handler {
     l := jsonLogger{}
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         start := time.Now()
-        next.ServeHTTP(w, r)
+        
+        // Wrap response writer to capture status code
+        rw := &responseWriter{ResponseWriter: w, statusCode: 200}
+        
+        next.ServeHTTP(rw, r)
         role := r.Context().Value(ctxRole)
         sub := r.Context().Value(ctxSub)
-        l.Println(map[string]any{"method": r.Method, "path": r.URL.Path, "dur_ms": time.Since(start).Milliseconds(), "role": role, "sub": sub})
+        
+        l.Println(map[string]any{
+            "event": "request_completed",
+            "method": r.Method,
+            "path": r.URL.Path,
+            "status": rw.statusCode,
+            "dur_ms": time.Since(start).Milliseconds(),
+            "role": role,
+            "sub": sub,
+            "cors_origin": w.Header().Get("Access-Control-Allow-Origin"),
+        })
     })
+}
+
+type responseWriter struct {
+    http.ResponseWriter
+    statusCode int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+    rw.statusCode = code
+    rw.ResponseWriter.WriteHeader(code)
 }
 
 var ipLimiters = struct{ m map[string]*rate.Limiter }{ m: map[string]*rate.Limiter{} }
@@ -125,8 +149,21 @@ func withCORS(next http.Handler) http.Handler {
     })
 }
 
-func writeJSON(w http.ResponseWriter, code int, v any) { w.Header().Set("Content-Type", "application/json"); w.WriteHeader(code); json.NewEncoder(w).Encode(v) }
-func writeError(w http.ResponseWriter, code int, reason string) { writeJSON(w, code, map[string]any{"error": reason}) }
+func writeJSON(w http.ResponseWriter, code int, v any) {
+    w.Header().Set("Content-Type", "application/json");
+    w.WriteHeader(code);
+    json.NewEncoder(w).Encode(v)
+}
+
+func writeError(w http.ResponseWriter, code int, reason string) {
+    l := jsonLogger{}
+    l.Println(map[string]any{
+        "event": "error_response",
+        "status_code": code,
+        "error_reason": reason,
+    })
+    writeJSON(w, code, map[string]any{"error": reason})
+}
 
 
 
