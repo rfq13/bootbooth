@@ -51,7 +51,7 @@ func buildRouter() http.Handler {
                 fmt.Printf("Error serving Socket.IO: %v\n", err)
             }
         }()
-        publicRouter.Handle("/socket.io/", socketIOSrv)
+        publicRouter.Handle("/socket.io/", withLogging(socketIOSrv))
     }
     
     // public endpoints
@@ -228,7 +228,7 @@ func buildRouter() http.Handler {
         }
         
         if strings.HasPrefix(r.URL.Path, "/socket.io/") {
-            withCORS(socketIOSrv).ServeHTTP(w, r)
+            withLogging(withCORS(socketIOSrv)).ServeHTTP(w, r)
             return
         }
         
