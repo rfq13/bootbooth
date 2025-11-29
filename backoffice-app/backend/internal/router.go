@@ -228,6 +228,14 @@ func buildRouter() http.Handler {
         }
         
         if strings.HasPrefix(r.URL.Path, "/socket.io/") {
+            l := jsonLogger{}
+            l.Println(map[string]any{
+                "event": "socket_request_received",
+                "method": r.Method,
+                "path": r.URL.Path,
+                "query": r.URL.RawQuery,
+                "user_agent": r.Header.Get("User-Agent"),
+            })
             withLogging(withCORS(socketIOSrv)).ServeHTTP(w, r)
             return
         }

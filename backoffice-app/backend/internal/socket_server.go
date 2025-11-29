@@ -1,11 +1,10 @@
 package backend
 
 import (
-    "fmt"
-    "strings"
-    "time"
+	"strings"
+	"time"
 
-    socketio "github.com/googollee/go-socket.io"
+	socketio "github.com/googollee/go-socket.io"
 )
 
 type boothRegister struct { Name string `json:"name"`; Location string `json:"location"`; OutletID string `json:"outlet_id"` }
@@ -13,11 +12,31 @@ type boothRegister struct { Name string `json:"name"`; Location string `json:"lo
 func newSocketIOServer(booths *boothHub, hub *hub) (*socketio.Server, error) {
     srv := socketio.NewServer(nil)
     
+    // Log server start
+    l := jsonLogger{}
+    l.Println(map[string]any{
+        "event": "socket_server_started",
+        "message": "Socket.IO server initialized",
+    })
+    
     srv.OnConnect("/", func(s socketio.Conn) error {
         s.SetContext("")
         // Log koneksi untuk debugging
-        fmt.Printf("Client connected: %s\n", s.ID())
+        l.Println(map[string]any{
+            "event": "socket_client_connected",
+            "socket_id": s.ID(),
+            "remote_addr": s.RemoteAddr().String(),
+            "url": s.URL(),
+        })
         return nil
+    })
+    
+    srv.OnError("/", func(s socketio.Conn, e error) {
+        l.Println(map[string]any{
+            "event": "socket_error",
+            "socket_id": s.ID(),
+            "error": e.Error(),
+        })
     })
     
     srv.OnEvent("/", "register", func(s socketio.Conn, p boothRegister) {
@@ -45,11 +64,23 @@ func newSocketIOServer(booths *boothHub, hub *hub) (*socketio.Server, error) {
             "booth_id": info.ID,
         })
         
-        fmt.Printf("Booth registered: %s, Name: %s, Location: %s\n", info.ID, info.Name, info.Location)
+        l := jsonLogger{}
+        l.Println(map[string]any{
+            "event": "booth_registered",
+            "socket_id": info.ID,
+            "booth_name": info.Name,
+            "location": info.Location,
+            "outlet_id": info.OutletID,
+        })
     })
     
     srv.OnDisconnect("/", func(s socketio.Conn, reason string) {
-        fmt.Printf("Client disconnected: %s, reason: %s\n", s.ID(), reason)
+        l := jsonLogger{}
+        l.Println(map[string]any{
+            "event": "socket_client_disconnected",
+            "socket_id": s.ID(),
+            "reason": reason,
+        })
         booths.unregister(s.ID())
         booths.markDisconnected(s.ID())
         hub.Broadcast(map[string]any{
