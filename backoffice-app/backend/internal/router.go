@@ -42,16 +42,39 @@ func buildRouter() http.Handler {
     })
     
     // Socket.IO for localbooth
+    l := jsonLogger{}
+    l.Println(map[string]any{
+        "event": "socket_server_initialization_start",
+        "message": "Creating Socket.IO server",
+    })
+    
     socketIOSrv, err := newSocketIOServer(booths, hub)
     if err != nil {
+        l.Println(map[string]any{
+            "event": "socket_server_creation_failed",
+            "error": err.Error(),
+        })
         fmt.Printf("Error creating Socket.IO server: %v\n", err)
     } else {
+        l.Println(map[string]any{
+            "event": "socket_server_created_successfully",
+            "message": "Socket.IO server created, starting serve routine",
+        })
         go func() {
             if err := socketIOSrv.Serve(); err != nil {
+                l.Println(map[string]any{
+                    "event": "socket_server_serve_error",
+                    "error": err.Error(),
+                })
                 fmt.Printf("Error serving Socket.IO: %v\n", err)
             }
         }()
         publicRouter.Handle("/socket.io/", withLogging(socketIOSrv))
+        l.Println(map[string]any{
+            "event": "socket_server_registered",
+            "path": "/socket.io/",
+            "handler": "publicRouter",
+        })
     }
     
     // public endpoints
