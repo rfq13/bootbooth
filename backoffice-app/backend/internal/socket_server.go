@@ -20,6 +20,13 @@ func newSocketIOServer(booths *boothHub, hub *hub) (*socketio.Server, error) {
     })
     
     srv.OnConnect("/", func(s socketio.Conn) error {
+        if s == nil {
+            l.Println(map[string]any{
+                "event": "socket_connect_error",
+                "error": "socket connection is nil",
+            })
+            return nil
+        }
         s.SetContext("")
         // Log koneksi untuk debugging
         l.Println(map[string]any{
@@ -32,9 +39,13 @@ func newSocketIOServer(booths *boothHub, hub *hub) (*socketio.Server, error) {
     })
     
     srv.OnError("/", func(s socketio.Conn, e error) {
+        socketID := "unknown"
+        if s != nil {
+            socketID = s.ID()
+        }
         l.Println(map[string]any{
             "event": "socket_error",
-            "socket_id": s.ID(),
+            "socket_id": socketID,
             "error": e.Error(),
         })
     })
@@ -76,17 +87,23 @@ func newSocketIOServer(booths *boothHub, hub *hub) (*socketio.Server, error) {
     
     srv.OnDisconnect("/", func(s socketio.Conn, reason string) {
         l := jsonLogger{}
+        socketID := "unknown"
+        if s != nil {
+            socketID = s.ID()
+            booths.unregister(socketID)
+            booths.markDisconnected(socketID)
+        }
         l.Println(map[string]any{
             "event": "socket_client_disconnected",
-            "socket_id": s.ID(),
+            "socket_id": socketID,
             "reason": reason,
         })
-        booths.unregister(s.ID())
-        booths.markDisconnected(s.ID())
-        hub.Broadcast(map[string]any{
-            "type":"BOOTH_DISCONNECTED",
-            "booth_id":s.ID(),
-        })
+        if s != nil {
+            hub.Broadcast(map[string]any{
+                "type":"BOOTH_DISCONNECTED",
+                "booth_id":socketID,
+            })
+        }
     })
     
     return srv, nil
