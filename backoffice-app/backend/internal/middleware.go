@@ -57,34 +57,66 @@ func withCORS(next http.Handler) http.Handler {
         origins := os.Getenv("FRONTEND_ORIGIN")
         originList := strings.Split(origins, ",")
         origin := "*"
+        reqOrigin := r.Header.Get("Origin")
+        
+        // Log informasi awal CORS
+        l.Println(map[string]any{
+            "event": "cors_debug_start",
+            "method": r.Method,
+            "path": r.URL.Path,
+            "request_origin": reqOrigin,
+            "allowed_origins_env": origins,
+            "origin_list": originList,
+        })
+        
         if len(originList) == 1 && originList[0] != "" {
             origin = originList[0]
+            l.Println(map[string]any{
+                "event": "cors_single_origin",
+                "selected_origin": origin,
+            })
         } else if len(originList) > 1 {
-            reqOrigin := r.Header.Get("Origin")
+            l.Println(map[string]any{
+                "event": "cors_multiple_origins_check",
+                "checking_origin": reqOrigin,
+            })
             for _, o := range originList {
                 if strings.TrimSpace(o) == reqOrigin {
                     origin = reqOrigin
+                    l.Println(map[string]any{
+                        "event": "cors_origin_match_found",
+                        "matched_origin": origin,
+                    })
                     break
                 }
+            }
+            if origin == "*" {
+                l.Println(map[string]any{
+                    "event": "cors_no_origin_match",
+                    "fallback_to_wildcard": true,
+                })
             }
         }
         if origin == "" { origin = "*" }
         
-        // Log CORS origin untuk debugging
-        l.Println(map[string]any{
-            "event": "cors_origin_set",
-            "method": r.Method,
-            "path": r.URL.Path,
-            "request_origin": r.Header.Get("Origin"),
-            "allowed_origins_env": origins,
-            "final_origin": origin,
-        })
         w.Header().Set("Access-Control-Allow-Origin", origin)
         w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
         w.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-CSRF-Token")
         w.Header().Set("Access-Control-Allow-Credentials", "true")
+        
+        // Log final CORS headers
+        l.Println(map[string]any{
+            "event": "cors_headers_set",
+            "final_origin": origin,
+            "allow_credentials": "true",
+        })
+        
         // normal OPTIONS handler
         if r.Method == http.MethodOptions {
+            l.Println(map[string]any{
+                "event": "cors_options_request",
+                "status": "204",
+            })
             w.WriteHeader(http.StatusNoContent)
             return
         }
@@ -95,6 +127,7 @@ func withCORS(next http.Handler) http.Handler {
 
 func writeJSON(w http.ResponseWriter, code int, v any) { w.Header().Set("Content-Type", "application/json"); w.WriteHeader(code); json.NewEncoder(w).Encode(v) }
 func writeError(w http.ResponseWriter, code int, reason string) { writeJSON(w, code, map[string]any{"error": reason}) }
+
 
 
 func b64(data []byte) string { return base64.RawURLEncoding.EncodeToString(data) }
