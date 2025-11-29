@@ -69,7 +69,7 @@ func buildRouter() http.Handler {
                 fmt.Printf("Error serving Socket.IO: %v\n", err)
             }
         }()
-        publicRouter.Handle("/socket.io/", withLogging(socketIOSrv))
+        // publicRouter.Handle("/socket.io/", withLogging(socketIOSrv)) // DUPLICATE - handled in main router
         l.Println(map[string]any{
             "event": "socket_server_registered",
             "path": "/socket.io/",
