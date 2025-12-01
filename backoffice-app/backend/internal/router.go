@@ -24,6 +24,31 @@ func buildRouter() http.Handler {
     var db = func() *sql.DB { d, _ := NewDB(); return d }()
     booths := newBoothHub(db)
     
+    // WebSocket server for localbooth
+    l := jsonLogger{}
+    l.Println(map[string]any{
+        "event": "socket_server_initialization_start",
+        "message": "Creating WebSocket server",
+    })
+    
+    socketIOSrv, err := newSocketIOServer(booths, hub)
+    if err != nil {
+        l.Println(map[string]any{
+            "event": "socket_server_creation_failed",
+            "error": err.Error(),
+        })
+        fmt.Printf("Error creating WebSocket server: %v\n", err)
+    } else {
+        l.Println(map[string]any{
+            "event": "socket_server_created_successfully",
+            "message": "WebSocket server created successfully",
+        })
+        l.Println(map[string]any{
+            "event": "socket_server_registered",
+            "path": "/socket.io/",
+        })
+    }
+    
     // Create a completely separate router for public endpoints (no middleware at all)
     publicRouter := http.NewServeMux()
     publicRouter.HandleFunc("/socket-test", func(w http.ResponseWriter, r *http.Request) {
@@ -34,48 +59,39 @@ func buildRouter() http.Handler {
         w.Header().Set("Access-Control-Allow-Credentials", "true")
         w.WriteHeader(200)
         json.NewEncoder(w).Encode(map[string]string{
-            "message": "Socket.IO server is running",
+            "message": "WebSocket server is running",
             "path": "/socket.io/",
             "port": "3002",
             "status": "active",
         })
     })
     
-    // Socket.IO for localbooth
-    l := jsonLogger{}
-    l.Println(map[string]any{
-        "event": "socket_server_initialization_start",
-        "message": "Creating Socket.IO server",
+    // Test endpoint untuk socket.io direct access
+    publicRouter.HandleFunc("/socket-test-direct", func(w http.ResponseWriter, r *http.Request) {
+        l := jsonLogger{}
+        l.Println(map[string]any{
+            "event": "socket_test_direct_called",
+            "method": r.Method,
+            "path": r.URL.Path,
+            "query": r.URL.RawQuery,
+        })
+        
+        // Test direct websocket server access
+        if socketIOSrv != nil {
+            l.Println(map[string]any{
+                "event": "socket_server_not_nil",
+                "message": "WebSocket server is available",
+            })
+            socketIOSrv.ServeHTTP(w, r)
+        } else {
+            l.Println(map[string]any{
+                "event": "socket_server_is_nil",
+                "message": "WebSocket server is nil",
+            })
+            w.WriteHeader(500)
+            json.NewEncoder(w).Encode(map[string]string{"error": "WebSocket server is nil"})
+        }
     })
-    
-    socketIOSrv, err := newSocketIOServer(booths, hub)
-    if err != nil {
-        l.Println(map[string]any{
-            "event": "socket_server_creation_failed",
-            "error": err.Error(),
-        })
-        fmt.Printf("Error creating Socket.IO server: %v\n", err)
-    } else {
-        l.Println(map[string]any{
-            "event": "socket_server_created_successfully",
-            "message": "Socket.IO server created, starting serve routine",
-        })
-        go func() {
-            if err := socketIOSrv.Serve(); err != nil {
-                l.Println(map[string]any{
-                    "event": "socket_server_serve_error",
-                    "error": err.Error(),
-                })
-                fmt.Printf("Error serving Socket.IO: %v\n", err)
-            }
-        }()
-        // publicRouter.Handle("/socket.io/", withLogging(socketIOSrv)) // DUPLICATE - handled in main router
-        l.Println(map[string]any{
-            "event": "socket_server_registered",
-            "path": "/socket.io/",
-            "handler": "publicRouter",
-        })
-    }
     
     // public endpoints
     mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"ok": "true"}) })
@@ -242,7 +258,7 @@ func buildRouter() http.Handler {
             w.Header().Set("Access-Control-Allow-Credentials", "true")
             w.WriteHeader(200)
             json.NewEncoder(w).Encode(map[string]string{
-                "message": "Socket.IO server is running",
+                "message": "WebSocket server is running",
                 "path": "/socket.io/",
                 "port": "3002",
                 "status": "active",
@@ -259,7 +275,29 @@ func buildRouter() http.Handler {
                 "query": r.URL.RawQuery,
                 "user_agent": r.Header.Get("User-Agent"),
             })
+            
+            // Debug: Check if socketIOSrv is nil
+            if socketIOSrv == nil {
+                l.Println(map[string]any{
+                    "event": "socket_server_is_nil_in_handler",
+                    "error": "socketIOSrv is nil when handling request",
+                })
+                w.WriteHeader(500)
+                json.NewEncoder(w).Encode(map[string]string{"error": "Socket.IO server is nil"})
+                return
+            }
+            
+            l.Println(map[string]any{
+                "event": "socket_server_about_to_serve",
+                "message": "About to call WebSocket handler",
+            })
+            
             withLogging(withCORS(socketIOSrv)).ServeHTTP(w, r)
+            
+            l.Println(map[string]any{
+                "event": "socket_server_serve_completed",
+                "message": "WebSocket handler completed",
+            })
             return
         }
         

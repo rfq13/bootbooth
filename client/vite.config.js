@@ -20,13 +20,6 @@ export default defineConfig({
           vendor: ["preact"],
           // Split keyboard library
           keyboard: ["simple-keyboard"],
-          // Split large libraries
-          mediapipe: ["@mediapipe/camera_utils", "@mediapipe/face_mesh"],
-          tensorflow: [
-            "@tensorflow-models/body-segmentation",
-            "@tensorflow/tfjs-backend-webgl",
-            "@tensorflow/tfjs-core",
-          ],
         },
       },
     },

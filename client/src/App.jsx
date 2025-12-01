@@ -8,7 +8,6 @@ import LayoutPage from "./components/LayoutPage.jsx";
 import { useNotify } from "./components/Notify.jsx";
 import { appState } from "./main.jsx";
 import { WS_URL, API_URL, BACKOFFICE_SOCKET_URL } from "./constants";
-import io from "socket.io-client";
 
 // Loading component untuk lazy loading
 const EditorLoading = () => (
@@ -146,28 +145,80 @@ function sendWebSocketEvent(event, data = {}) {
   }
 }
 
-// Backoffice Socket.IO connection (unchanged)
-console.log(
-  "🔍 DEBUG: Attempting to connect backoffice Socket.IO to:",
-  BACKOFFICE_SOCKET_URL
-);
+// Backoffice WebSocket connection functions
+function connectBackofficeWebSocket(url) {
+  try {
+    // Convert HTTP URL to WebSocket URL
+    const wsUrl =
+      url.replace("http://", "ws://").replace("https://", "wss://") +
+      "/socket.io/";
+    console.log(
+      "🔍 DEBUG: Attempting to connect backoffice WebSocket to:",
+      wsUrl
+    );
 
-try {
-  console.log({ BACKOFFICE_SOCKET_URL });
-  boSocket = io(BACKOFFICE_SOCKET_URL, {
-    transports: ["polling", "websocket"],
-    upgrade: true,
-    rememberUpgrade: true,
-    path: "/socket.io/",
-    reconnection: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1000,
-    timeout: 5000,
-    forceNew: true,
-    autoConnect: false,
-  });
-} catch (error) {
-  console.error("Error creating backoffice Socket.IO connection:", error);
+    boSocket = new WebSocket(wsUrl);
+
+    boSocket.onopen = () => {
+      console.log("✅ DEBUG: Backoffice WebSocket connected successfully!");
+      if (window.onBackofficeConnected) {
+        window.onBackofficeConnected();
+      }
+    };
+
+    boSocket.onclose = (event) => {
+      console.log(
+        "❌ DEBUG: Backoffice WebSocket disconnected. Code:",
+        event.code,
+        "Reason:",
+        event.reason
+      );
+      if (window.onBackofficeDisconnected) {
+        window.onBackofficeDisconnected(event.reason);
+      }
+    };
+
+    boSocket.onerror = (error) => {
+      console.log("❌ DEBUG: Backoffice WebSocket connection error:", error);
+      if (window.onBackofficeError) {
+        window.onBackofficeError(error);
+      }
+    };
+
+    boSocket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("📨 Received backoffice WebSocket message:", data);
+
+        if (data.event && window.onBackofficeEvent) {
+          window.onBackofficeEvent(data.event, data.data);
+        }
+      } catch (error) {
+        console.error("Error parsing backoffice WebSocket message:", error);
+      }
+    };
+
+    return boSocket;
+  } catch (error) {
+    console.error("Error creating backoffice WebSocket connection:", error);
+    return null;
+  }
+}
+
+function sendBackofficeEvent(event, data = {}) {
+  if (boSocket && boSocket.readyState === WebSocket.OPEN) {
+    const message = JSON.stringify({
+      event: event,
+      data: data,
+    });
+    boSocket.send(message);
+    console.log("📤 Sent backoffice WebSocket event:", event, data);
+  } else {
+    console.warn(
+      "Backoffice WebSocket not connected, cannot send event:",
+      event
+    );
+  }
 }
 
 export default function App() {
@@ -365,65 +416,54 @@ export default function App() {
       websocket = connectWebSocket(WS_URL);
     }
 
-    // Backoffice Socket.IO connection
-    if (boSocket) {
-      const doRegister = () => {
-        if (!identity || !identity.booth_name) return;
-        const name = identity.booth_name;
-        const loc = identity.location || {};
-        const location =
-          typeof loc === "string" ? loc : `${loc.lat || 0},${loc.lng || 0}`;
-        const outletId = "out-1";
-        const registrationTimeout = setTimeout(() => {
-          notify("error", "Gagal mendaftar ke backoffice");
-        }, 5000);
-        boSocket.emit(
-          "register",
-          { name, location, outlet_id: outletId },
-          (response) => {
-            clearTimeout(registrationTimeout);
-            if (response && response.success) {
-              notify("success", "Berhasil terhubung ke backoffice");
-            } else {
-              notify("error", "Gagal mendaftar ke backoffice");
-            }
+    // Backoffice WebSocket connection
+    const doRegister = () => {
+      if (!identity || !identity.booth_name) return;
+      const name = identity.booth_name;
+      const loc = identity.location || {};
+      const location =
+        typeof loc === "string" ? loc : `${loc.lat || 0},${loc.lng || 0}`;
+      const outletId = "out-1";
+      console.log("remondol", { identity });
+      // Send registration event
+      sendBackofficeEvent("register", { name, location, outlet_id: outletId });
+    };
+
+    // Backoffice WebSocket event handlers
+    window.onBackofficeConnected = () => {
+      console.log("✅ Backoffice WebSocket connected successfully");
+      doRegister();
+    };
+
+    window.onBackofficeDisconnected = (reason) => {
+      notify("warning", `Koneksi backoffice terputus: ${reason}`);
+    };
+
+    window.onBackofficeError = (error) => {
+      console.log("Backoffice WebSocket error:", error);
+      notify("error", `Koneksi backoffice gagal: ${error.message || error}`);
+    };
+
+    window.onBackofficeEvent = (eventName, data) => {
+      console.log("📨 Received backoffice WebSocket event:", eventName, data);
+
+      switch (eventName) {
+        case "registered":
+          console.log("wongchu", { data });
+          if (data.success) {
+            notify("success", "Berhasil terdaftar di backoffice");
+          } else {
+            notify("error", "Gagal mendaftar ke backoffice");
           }
-        );
-      };
-
-      boSocket.off("connect");
-      boSocket.off("registered");
-      boSocket.off("disconnect");
-      boSocket.off("connect_error");
-
-      boSocket.on("connect", () => {
-        console.log("✅ Socket connected successfully");
-        doRegister();
-      });
-
-      boSocket.on("connected", (data) => {
-        console.log("✅ Server acknowledgment received:", data);
-      });
-
-      boSocket.on("registered", (data) => {
-        if (data.success) {
-          notify("success", "Berhasil terdaftar di backoffice");
-        }
-      });
-
-      boSocket.on("disconnect", (reason) => {
-        notify("warning", `Koneksi backoffice terputus: ${reason}`);
-      });
-
-      boSocket.on("connect_error", (error) => {
-        notify("error", `Koneksi backoffice gagal: ${error.message}`);
-      });
-
-      if (boSocket.connected) {
-        doRegister();
-      } else {
-        boSocket.connect();
+          break;
+        default:
+          console.log("⚠️ Unknown backoffice WebSocket event:", eventName);
       }
+    };
+
+    // Connect to backoffice WebSocket
+    if (!boSocket || boSocket.readyState !== WebSocket.OPEN) {
+      connectBackofficeWebSocket(BACKOFFICE_SOCKET_URL);
     }
 
     return () => {
@@ -439,10 +479,16 @@ export default function App() {
         websocket = null;
       }
 
+      // Cleanup backoffice WebSocket
       if (boSocket) {
-        boSocket.off("connect");
-        boSocket.off("disconnect");
+        boSocket.close();
+        boSocket = null;
       }
+
+      window.onBackofficeConnected = null;
+      window.onBackofficeDisconnected = null;
+      window.onBackofficeError = null;
+      window.onBackofficeEvent = null;
     };
   }, [identityReady, identity]);
 

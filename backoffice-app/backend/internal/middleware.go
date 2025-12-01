@@ -25,24 +25,39 @@ func withLogging(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         start := time.Now()
         
-        // Wrap response writer to capture status code
-        rw := &responseWriter{ResponseWriter: w, statusCode: 200}
+        // Don't wrap response writer for WebSocket requests to allow hijacking
+        var rw http.ResponseWriter = w
+        var statusCode = 200
+        
+        if !isWebSocketRequest(r) {
+            rw = &responseWriter{ResponseWriter: w, statusCode: 200}
+        }
         
         next.ServeHTTP(rw, r)
         role := r.Context().Value(ctxRole)
         sub := r.Context().Value(ctxSub)
         
+        // Get status code from responseWriter if it was used
+        if respWriter, ok := rw.(*responseWriter); ok {
+            statusCode = respWriter.statusCode
+        }
+        
         l.Println(map[string]any{
             "event": "request_completed",
             "method": r.Method,
             "path": r.URL.Path,
-            "status": rw.statusCode,
+            "status": statusCode,
             "dur_ms": time.Since(start).Milliseconds(),
             "role": role,
             "sub": sub,
             "cors_origin": w.Header().Get("Access-Control-Allow-Origin"),
         })
     })
+}
+
+func isWebSocketRequest(r *http.Request) bool {
+    return strings.ToLower(r.Header.Get("Connection")) == "upgrade" &&
+           strings.ToLower(r.Header.Get("Upgrade")) == "websocket"
 }
 
 type responseWriter struct {
@@ -81,47 +96,27 @@ func withCORS(next http.Handler) http.Handler {
         origins := os.Getenv("FRONTEND_ORIGIN")
         originList := strings.Split(origins, ",")
         origin := "*"
-        reqOrigin := r.Header.Get("Origin")
-        
-        // Log informasi awal CORS
-        l.Println(map[string]any{
-            "event": "cors_debug_start",
-            "method": r.Method,
-            "path": r.URL.Path,
-            "request_origin": reqOrigin,
-            "allowed_origins_env": origins,
-            "origin_list": originList,
-        })
-        
         if len(originList) == 1 && originList[0] != "" {
             origin = originList[0]
-            l.Println(map[string]any{
-                "event": "cors_single_origin",
-                "selected_origin": origin,
-            })
         } else if len(originList) > 1 {
-            l.Println(map[string]any{
-                "event": "cors_multiple_origins_check",
-                "checking_origin": reqOrigin,
-            })
+            reqOrigin := r.Header.Get("Origin")
             for _, o := range originList {
                 if strings.TrimSpace(o) == reqOrigin {
                     origin = reqOrigin
-                    l.Println(map[string]any{
-                        "event": "cors_origin_match_found",
-                        "matched_origin": origin,
-                    })
                     break
                 }
             }
-            if origin == "*" {
-                l.Println(map[string]any{
-                    "event": "cors_no_origin_match",
-                    "fallback_to_wildcard": true,
-                })
-            }
         }
-        if origin == "" { origin = "*" }
+        
+        // Logging origin untuk ditampilkan di docker logs
+        l.Println(map[string]any{
+            "event": "origin_logging",
+            "request_origin": r.Header.Get("Origin"),
+            "allowed_origins_env": origins,
+            "origin_list": originList,
+            "final_origin": origin,
+            "path": r.URL.Path,
+        })
         
         w.Header().Set("Access-Control-Allow-Origin", origin)
         w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
