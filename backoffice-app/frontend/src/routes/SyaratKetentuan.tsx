@@ -1,10 +1,41 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getActiveTerms } from "../utils/api";
+import { Button } from "../components/ui/button";
+import {
+  Info,
+  BookText,
+  UserCheck,
+  CreditCard,
+  Shield,
+  HelpCircle,
+  Check,
+  ArrowRight,
+  Phone,
+  Mail,
+} from "lucide-react";
 import { Helmet } from "react-helmet-async";
 
 const appName = import.meta.env.VITE_APP_NAME || "PijarRupa";
 
 export default function SyaratKetentuan() {
+  const [blocks, setBlocks] = useState<any[]>([]);
+  const [version, setVersion] = useState<string>("");
+
   useEffect(() => {
+    (async () => {
+      try {
+        const t = await getActiveTerms();
+        setVersion(t.version_code || "");
+        let content = t.content;
+        if (typeof content === "string") {
+          try {
+            content = JSON.parse(content);
+          } catch {}
+        }
+        if (Array.isArray(content)) setBlocks(content);
+      } catch {}
+    })();
+
     // Smooth scroll untuk anchor links
     const handleAnchorClick = (e: Event) => {
       const target = e.target as HTMLAnchorElement;
@@ -29,6 +60,23 @@ export default function SyaratKetentuan() {
       });
     };
   }, []);
+
+  const Icon = useMemo(
+    () =>
+      ({
+        info: Info,
+        book: BookText,
+        "user-check": UserCheck,
+        "credit-card": CreditCard,
+        shield: Shield,
+        "help-circle": HelpCircle,
+        check: Check,
+        "arrow-right": ArrowRight,
+        phone: Phone,
+        mail: Mail,
+      } as Record<string, any>),
+    []
+  );
 
   return (
     <>
@@ -144,290 +192,58 @@ export default function SyaratKetentuan() {
         <section className="px-8 py-24 bg-white" id="terms">
           <div className="max-w-4xl mx-auto">
             <div className="prose prose-lg max-w-none">
-              {/* Pengantar */}
-              <div className="mb-12">
-                <h2 className="text-3xl font-bold text-[#1a1917] mb-6 flex items-center gap-3">
-                  <i className="fas fa-info-circle text-[#B3916F]"></i>
-                  Pengantar
-                </h2>
-                <p className="text-[#6d6354] leading-relaxed mb-4">
-                  Selamat datang di {appName}. Syarat dan ketentuan ini mengatur
-                  penggunaan layanan photobooth digital yang kami sediakan.
-                  Dengan menggunakan layanan kami, Anda setuju untuk mematuhi
-                  semua syarat dan ketentuan yang tercantum di bawah ini.
-                </p>
-                <p className="text-[#6d6354] leading-relaxed">
-                  Terakhir diperbarui: 22 November 2024
-                </p>
+              <div className="mb-4 text-sm text-[#9c8f78]">
+                Versi: {version || "-"}
               </div>
-
-              {/* Definisi */}
-              <div className="mb-12">
-                <h2 className="text-3xl font-bold text-[#1a1917] mb-6 flex items-center gap-3">
-                  <i className="fas fa-book text-[#B3916F]"></i>
-                  Definisi
-                </h2>
-                <div className="bg-[#FDF8F3] p-6 rounded-2xl">
-                  <ul className="space-y-3 text-[#6d6354]">
-                    <li className="flex items-start gap-3">
-                      <i className="fas fa-check text-[#C5A888] mt-1"></i>
-                      <div>
-                        <strong>Layanan:</strong> Solusi photobooth digital yang
-                        kami sediakan termasuk perangkat keras, perangkat lunak,
-                        dan dukungan teknis.
+              {blocks.map((b, i) => {
+                if (b.type === "heading") {
+                  const level = b.level || 2;
+                  const text = b.text || "";
+                  const Ico = b.icon && Icon[b.icon] ? Icon[b.icon] : Info;
+                  return (
+                    <div key={i} className="mb-8">
+                      <h2 className="text-3xl font-bold text-[#1a1917] mb-6 flex items-center gap-3">
+                        <Ico className="text-[#B3916F]" />
+                        {text}
+                      </h2>
+                    </div>
+                  );
+                }
+                if (b.type === "paragraph") {
+                  return (
+                    <p key={i} className="text-[#6d6354] leading-relaxed mb-4">
+                      {b.text}
+                    </p>
+                  );
+                }
+                if (b.type === "list") {
+                  const items = Array.isArray(b.items) ? b.items : [];
+                  return (
+                    <div key={i} className="bg-[#FDF8F3] p-6 rounded-2xl mb-8">
+                      <ul className="space-y-2 text-[#6d6354] ml-4">
+                        {items.map((it: any, idx: number) => (
+                          <li key={idx}>• {it}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                }
+                if (b.type === "callout") {
+                  const Ico = b.icon && Icon[b.icon] ? Icon[b.icon] : Info;
+                  return (
+                    <div
+                      key={i}
+                      className="bg-gradient-to-br from-[#FAF1E7] to-[#F3E5D3] p-8 rounded-2xl mb-8"
+                    >
+                      <div className="flex items-start gap-3">
+                        <Ico className="text-[#B3916F]" />
+                        <div className="text-[#6d6354]">{b.text}</div>
                       </div>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fas fa-check text-[#C5A888] mt-1"></i>
-                      <div>
-                        <strong>Pengguna:</strong> Individu atau perusahaan yang
-                        menggunakan layanan {appName} untuk acara atau keperluan
-                        komersial.
-                      </div>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fas fa-check text-[#C5A888] mt-1"></i>
-                      <div>
-                        <strong>Konten:</strong> Foto, video, dan materi visual
-                        lainnya yang dihasilkan melalui layanan {appName}.
-                      </div>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fas fa-check text-[#C5A888] mt-1"></i>
-                      <div>
-                        <strong>Akun:</strong> Akses pribadi yang diberikan
-                        kepada Pengguna untuk mengelola layanan {appName}.
-                      </div>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-
-              {/* Ketentuan Penggunaan */}
-              <div className="mb-12">
-                <h2 className="text-3xl font-bold text-[#1a1917] mb-6 flex items-center gap-3">
-                  <i className="fas fa-user-check text-[#B3916F]"></i>
-                  Ketentuan Penggunaan
-                </h2>
-                <div className="space-y-6">
-                  <div className="bg-[#FDF8F3] p-6 rounded-2xl">
-                    <h3 className="text-xl font-semibold text-[#1a1917] mb-3">
-                      1. Pendaftaran Akun
-                    </h3>
-                    <ul className="space-y-2 text-[#6d6354] ml-4">
-                      <li>
-                        • Pengguna harus mendaftar dengan informasi yang akurat
-                        dan lengkap
-                      </li>
-                      <li>
-                        • Pengguna bertanggung jawab atas keamanan akun
-                        masing-masing
-                      </li>
-                      <li>
-                        • Setiap akun hanya untuk satu pengguna atau entitas
-                        bisnis
-                      </li>
-                      <li>
-                        • Kami berhak menangguhkan akun yang melanggar ketentuan
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div className="bg-[#FDF8F3] p-6 rounded-2xl">
-                    <h3 className="text-xl font-semibold text-[#1a1917] mb-3">
-                      2. Penggunaan Layanan
-                    </h3>
-                    <ul className="space-y-2 text-[#6d6354] ml-4">
-                      <li>
-                        • Layanan hanya boleh digunakan untuk tujuan yang sah
-                        dan etis
-                      </li>
-                      <li>
-                        • Dilarang menggunakan layanan untuk aktivitas ilegal
-                        atau melanggar hukum
-                      </li>
-                      <li>
-                        • Pengguna tidak boleh mencoba membobol atau merusak
-                        sistem
-                      </li>
-                      <li>
-                        • Setiap pelanggaran akan ditindak sesuai hukum yang
-                        berlaku
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div className="bg-[#FDF8F3] p-6 rounded-2xl">
-                    <h3 className="text-xl font-semibold text-[#1a1917] mb-3">
-                      3. Konten dan Hak Cipta
-                    </h3>
-                    <ul className="space-y-2 text-[#6d6354] ml-4">
-                      <li>
-                        • Pengguna memegang hak cipta atas konten yang
-                        dihasilkan
-                      </li>
-                      <li>
-                        • {appName} memiliki hak untuk menggunakan konten untuk
-                        tujuan promosi dengan persetujuan pengguna
-                      </li>
-                      <li>
-                        • Pengguna bertanggung jawab atas konten yang diunggah
-                        atau dibagikan
-                      </li>
-                      <li>
-                        • Dilarang mengunggah konten yang melanggar hak cipta
-                        pihak ketiga
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              {/* Pembayaran dan Tagihan */}
-              <div className="mb-12">
-                <h2 className="text-3xl font-bold text-[#1a1917] mb-6 flex items-center gap-3">
-                  <i className="fas fa-credit-card text-[#B3916F]"></i>
-                  Pembayaran dan Tagihan
-                </h2>
-                <div className="space-y-6">
-                  <div className="bg-[#FDF8F3] p-6 rounded-2xl">
-                    <h3 className="text-xl font-semibold text-[#1a1917] mb-3">
-                      1. Struktur Harga
-                    </h3>
-                    <ul className="space-y-2 text-[#6d6354] ml-4">
-                      <li>• Harga berdasarkan paket langganan yang dipilih</li>
-                      <li>
-                        • Biaya tambahan untuk fitur premium atau penggunaan
-                        ekstra
-                      </li>
-                      <li>
-                        • Harga dapat berubah sewaktu-waktu dengan pemberitahuan
-                        30 hari
-                      </li>
-                      <li>• Diskon tersedia untuk pembayaran tahunan</li>
-                    </ul>
-                  </div>
-
-                  <div className="bg-[#FDF8F3] p-6 rounded-2xl">
-                    <h3 className="text-xl font-semibold text-[#1a1917] mb-3">
-                      2. Metode Pembayaran
-                    </h3>
-                    <ul className="space-y-2 text-[#6d6354] ml-4">
-                      <li>• Transfer bank ke rekening resmi {appName}</li>
-                      <li>• Pembayaran melalui gateway pembayaran online</li>
-                      <li>
-                        • Pembayaran harus dilakukan sebelum tanggal jatuh tempo
-                      </li>
-                      <li>
-                        • Denda keterlambatan 2% per hari dari total tagihan
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div className="bg-[#FDF8F3] p-6 rounded-2xl">
-                    <h3 className="text-xl font-semibold text-[#1a1917] mb-3">
-                      3. Kebijakan Pengembalian
-                    </h3>
-                    <ul className="space-y-2 text-[#6d6354] ml-4">
-                      <li>
-                        • Pengembalian dana hanya untuk layanan yang belum
-                        digunakan
-                      </li>
-                      <li>
-                        • Permintaan pengembalian harus diajukan dalam 7 hari
-                      </li>
-                      <li>• Biaya administrasi 10% dari total pengembalian</li>
-                      <li>• Pengembalian diproses dalam 14 hari kerja</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              {/* Privasi dan Keamanan */}
-              <div className="mb-12">
-                <h2 className="text-3xl font-bold text-[#1a1917] mb-6 flex items-center gap-3">
-                  <i className="fas fa-shield-alt text-[#B3916F]"></i>
-                  Privasi dan Keamanan
-                </h2>
-                <div className="space-y-6">
-                  <div className="bg-[#FDF8F3] p-6 rounded-2xl">
-                    <h3 className="text-xl font-semibold text-[#1a1917] mb-3">
-                      1. Perlindungan Data
-                    </h3>
-                    <ul className="space-y-2 text-[#6d6354] ml-4">
-                      <li>
-                        • Kami melindungi data pribadi sesuai GDPR dan regulasi
-                        setempat
-                      </li>
-                      <li>
-                        • Data pengguna disimpan dengan enkripsi standar
-                        industri
-                      </li>
-                      <li>
-                        • Kami tidak menjual data pribadi kepada pihak ketiga
-                      </li>
-                      <li>
-                        • Pengguna dapat mengakses dan menghapus data pribadi
-                        kapan saja
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div className="bg-[#FDF8F3] p-6 rounded-2xl">
-                    <h3 className="text-xl font-semibold text-[#1a1917] mb-3">
-                      2. Keamanan Sistem
-                    </h3>
-                    <ul className="space-y-2 text-[#6d6354] ml-4">
-                      <li>• Sistem dilengkapi dengan keamanan berlapis</li>
-                      <li>• Backup data dilakukan secara rutin</li>
-                      <li>• Monitoring keamanan 24/7</li>
-                      <li>• Update keamanan dilakukan secara berkala</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              {/* Pembatalan dan Pengakhiran */}
-              <div className="mb-12">
-                <h2 className="text-3xl font-bold text-[#1a1917] mb-6 flex items-center gap-3">
-                  <i className="fas fa-times-circle text-[#B3916F]"></i>
-                  Pembatalan dan Pengakhiran
-                </h2>
-                <div className="bg-[#FDF8F3] p-6 rounded-2xl">
-                  <ul className="space-y-3 text-[#6d6354]">
-                    <li className="flex items-start gap-3">
-                      <i className="fas fa-arrow-right text-[#C5A888] mt-1"></i>
-                      <div>
-                        <strong>
-                          Pengguna dapat membatalkan langganan kapan saja
-                        </strong>{" "}
-                        dengan pemberitahuan 30 hari sebelum tanggal pemutusan.
-                      </div>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fas fa-arrow-right text-[#C5A888] mt-1"></i>
-                      <div>
-                        <strong>{appName} dapat mengakhiri layanan</strong> jika
-                        pengguna melanggar syarat dan ketentuan.
-                      </div>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fas fa-arrow-right text-[#C5A888] mt-1"></i>
-                      <div>
-                        <strong>Data pengguna akan dihapus</strong> dalam 30
-                        hari setelah pengakhiran layanan.
-                      </div>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <i className="fas fa-arrow-right text-[#C5A888] mt-1"></i>
-                      <div>
-                        <strong>Tidak ada pengembalian dana</strong> untuk sisa
-                        periode langganan yang belum digunakan.
-                      </div>
-                    </li>
-                  </ul>
-                </div>
-              </div>
+                    </div>
+                  );
+                }
+                return null;
+              })}
 
               {/* Hubungi Kami */}
               <div className="mb-12">

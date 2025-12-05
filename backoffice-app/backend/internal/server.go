@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -44,8 +45,15 @@ func NewServer() *Server {
 
 func (s *Server) Shutdown(ctx context.Context) { s.Http.Shutdown(ctx) }
 func (s *Server) ListenAndServe() error {
-    if s.CertFile != "" && s.KeyFile != "" {
-        return s.Http.ListenAndServeTLS(s.CertFile, s.KeyFile)
+    // Only enable TLS when both cert and key paths are provided and exist
+    if cf := strings.TrimSpace(s.CertFile); cf != "" {
+        if kf := strings.TrimSpace(s.KeyFile); kf != "" {
+            if _, err1 := os.Stat(cf); err1 == nil {
+                if _, err2 := os.Stat(kf); err2 == nil {
+                    return s.Http.ListenAndServeTLS(cf, kf)
+                }
+            }
+        }
     }
     return s.Http.ListenAndServe()
 }

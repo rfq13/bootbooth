@@ -1,7 +1,7 @@
 import { signal, computed } from '@preact/signals-react'
 
 export const token = signal<string | null>(null)
-export const role = signal<'admin' | 'super_admin' | null>(null)
+export const role = signal<'admin' | 'super_admin' | 'user' | null>(null)
 const LS_KEY = 'backoffice_auth'
 const SS_KEY = 'backoffice_auth_session'
 try {
@@ -28,7 +28,7 @@ function isExpired(t: string | null): boolean {
 }
 export function useAuth() {
   const isAuthenticated = computed(() => !!token.value && !isExpired(token.value))
-  function login(t: string, r: 'admin' | 'super_admin', remember = true) {
+  function login(t: string, r: 'admin' | 'super_admin' | 'user', remember = true) {
     token.value = t; role.value = r
     const payload = JSON.stringify({ token: t, role: r })
     if (remember) { localStorage.setItem(LS_KEY, payload); sessionStorage.removeItem(SS_KEY) }

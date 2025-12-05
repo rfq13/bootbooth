@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { LayoutDashboard, Box, Users, CalendarDays, ShieldAlert, Settings, HelpCircle } from 'lucide-react'
+import { LayoutDashboard, Box, Users, CalendarDays, ShieldAlert, Settings, HelpCircle, BadgeDollarSign } from 'lucide-react'
 
 export function Sidebar() {
   const { role, isAuthenticated } = useAuth()
@@ -12,6 +12,7 @@ export function Sidebar() {
       <div className="text-xs uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>General</div>
       <nav className="space-y-1">
         <NavLink className={({ isActive }) => (isActive ? 'flex items-center gap-2 px-3 py-2 rounded-md text-white' : 'flex items-center gap-2 px-3 py-2 rounded-md hover:opacity-90') } style={({ isActive }) => ({ background: isActive ? 'var(--accent-gradient)' : 'transparent', color: isActive ? '#111827' : 'var(--muted)' })} to="/dashboard"><LayoutDashboard size={16} className="icon-anim"/>Dashboard</NavLink>
+        <NavLink className={({ isActive }) => (isActive ? 'flex items-center gap-2 px-3 py-2 rounded-md text-white' : 'flex items-center gap-2 px-3 py-2 rounded-md hover:opacity-90') } style={({ isActive }) => ({ background: isActive ? 'var(--accent-gradient)' : 'transparent', color: isActive ? '#111827' : 'var(--muted)' })} to="/pricing"><BadgeDollarSign size={16} className="icon-anim"/>Pricing</NavLink>
         {isSuper && <NavLink className={({ isActive }) => (isActive ? 'flex items-center gap-2 px-3 py-2 rounded-md text-white' : 'flex items-center gap-2 px-3 py-2 rounded-md hover:opacity-90')} style={({ isActive }) => ({ background: isActive ? 'var(--accent-gradient)' : 'transparent', color: isActive ? '#111827' : 'var(--muted)' })} to="/outlets"><Box size={16} className="icon-anim"/>Outlets</NavLink>}
         {isSuper && <NavLink className={({ isActive }) => (isActive ? 'flex items-center gap-2 px-3 py-2 rounded-md text-white' : 'flex items-center gap-2 px-3 py-2 rounded-md hover:opacity-90')} style={({ isActive }) => ({ background: isActive ? 'var(--accent-gradient)' : 'transparent', color: isActive ? '#111827' : 'var(--muted)' })} to="/admins"><Users size={16} className="icon-anim"/>Admin Users</NavLink>}
         <NavLink className={({ isActive }) => (isActive ? 'flex items-center gap-2 px-3 py-2 rounded-md text-white' : 'flex items-center gap-2 px-3 py-2 rounded-md hover:opacity-90')} style={({ isActive }) => ({ background: isActive ? 'var(--accent-gradient)' : 'transparent', color: isActive ? '#111827' : 'var(--muted)' })} to="/bookings"><CalendarDays size={16} className="icon-anim"/>Bookings</NavLink>

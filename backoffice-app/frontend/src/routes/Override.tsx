@@ -18,8 +18,8 @@ export default function Override() {
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="p-4">
           <div className="grid gap-3">
-            <label className="grid gap-1"><span className="text-sm">Session ID</span><Input value={sessionId} onChange={e => setSessionId((e.target as HTMLInputElement).value)} /></label>
-            <label className="grid gap-1"><span className="text-sm">Admin ID</span><Input value={adminId} onChange={e => setAdminId((e.target as HTMLInputElement).value)} /></label>
+            <label className="grid gap-1"><span className="text-sm">Session ID</span><Input value={sessionId} onChange={e => setSessionId((e.target as HTMLInputElement).value)} placeholder="Masukkan ID sesi" /></label>
+            <label className="grid gap-1"><span className="text-sm">Admin ID</span><Input value={adminId} onChange={e => setAdminId((e.target as HTMLInputElement).value)} placeholder="Masukkan ID admin" /></label>
             <div className="flex gap-2"><Button onClick={checkStatus as any}>Cek Status</Button><Button onClick={doOverride as any}>Override</Button></div>
             {error && <div className="text-[#ef4444]">{error}</div>}
           </div>

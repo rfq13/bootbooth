@@ -112,3 +112,6 @@ server-cpp/obj/
 server-cpp/data/
 backoffice-app/frontend/dist
 backoffice-app/frontend/dist-ssr
+backoffice-app/backend/server.exe
+backoffice-app/backend/server
+.gitignore

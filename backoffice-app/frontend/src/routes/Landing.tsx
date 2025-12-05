@@ -1,8 +1,7 @@
 // Komponen landing terpisah dari admin, tidak menggunakan UI dari admin
 import { useEffect } from "react";
 import { Helmet } from "react-helmet-async";
-
-const appName = import.meta.env.VITE_APP_NAME || "PijarRupa";
+import { appName } from "../utils/constants";
 
 export default function Landing() {
   useEffect(() => {
@@ -62,7 +61,7 @@ export default function Landing() {
         <nav className="fixed top-0 w-full bg-[rgba(253,248,243,0.95)] backdrop-blur-lg px-8 py-4 z-50 shadow-[0_2px_20px_rgba(155,122,91,0.1)]">
           <div className="max-w-6xl mx-auto flex justify-between items-center">
             <div className="flex items-center gap-2 text-2xl font-bold text-[#1a1917]">
-              <i className="fas fa-camera-retro text-[#B3916F]"></i>
+              <img src="/icon.png" alt={appName} className="w-10 h-10" />
               {appName}
             </div>
             <ul className="flex gap-8 list-none">

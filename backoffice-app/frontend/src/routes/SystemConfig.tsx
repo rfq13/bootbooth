@@ -38,11 +38,11 @@ export default function SystemConfig() {
         <div className="grid lg:grid-cols-2 gap-3">
           <label className="grid gap-1">
             <span className="text-sm">Durasi sesi (menit)</span>
-            <Input type="number" value={sessionMinutes} onChange={e => setSessionMinutes(Number((e.target as HTMLInputElement).value))} />
+            <Input type="number" value={sessionMinutes} onChange={e => setSessionMinutes(Number((e.target as HTMLInputElement).value))} placeholder="Durasi sesi dalam menit (contoh: 30)" />
           </label>
           <label className="grid gap-1">
             <span className="text-sm">Toleransi terlambat (menit)</span>
-            <Input type="number" value={toleranceMinutes} onChange={e => setToleranceMinutes(Number((e.target as HTMLInputElement).value))} />
+            <Input type="number" value={toleranceMinutes} onChange={e => setToleranceMinutes(Number((e.target as HTMLInputElement).value))} placeholder="Toleransi keterlambatan (contoh: 10)" />
           </label>
         </div>
         <div className="flex gap-2 mt-3"><Button disabled={saving} onClick={save as any}>{saving ? 'Menyimpan...' : 'Simpan'}</Button></div>

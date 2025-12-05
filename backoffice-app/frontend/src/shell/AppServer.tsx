@@ -14,7 +14,7 @@ const Override = lazy(() => import('../routes/Override'))
 const Login = lazy(() => import('../routes/Login'))
 const SystemConfig = lazy(() => import('../routes/SystemConfig'))
 
-function Protected({ children, roles }: { children: any; roles?: Array<'admin'|'super_admin'> }) {
+function Protected({ children, roles }: { children: any; roles?: Array<'admin'|'super_admin'|'user'> }) {
   const { isAuthenticated, role } = useAuth()
   if (!isAuthenticated.value) return <Navigate to="/" replace />
   if (roles && role.value && !roles.includes(role.value)) return <Navigate to="/dashboard" replace />

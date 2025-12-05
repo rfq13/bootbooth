@@ -26,20 +26,13 @@ const SystemConfig = lazy(() => import("../routes/SystemConfig"));
 const Landing = lazy(() => import("../routes/Landing"));
 const TentangKami = lazy(() => import("../routes/TentangKami"));
 const SyaratKetentuan = lazy(() => import("../routes/SyaratKetentuan"));
-
-function Protected({
-  children,
-  roles,
-}: {
-  children: any;
-  roles?: Array<"admin" | "super_admin">;
-}) {
-  const { isAuthenticated, role } = useAuth();
-  if (!isAuthenticated.value) return <Navigate to="/" replace />;
-  if (roles && role.value && !roles.includes(role.value))
-    return <Navigate to="/dashboard" replace />;
-  return children;
-}
+const Pricing = lazy(() => import("../routes/Pricing"));
+const Transactions = lazy(() => import("../routes/Transactions"));
+const TermsEditor = lazy(() => import("../routes/TermsEditor"));
+const TermsVersions = lazy(() => import("../routes/TermsVersions"));
+const Register = lazy(() => import("../routes/Register"));
+const ForgotPassword = lazy(() => import("../routes/ForgotPassword"));
+const VerifyEmail = lazy(() => import("../routes/VerifyEmail"));
 
 function InnerApp() {
   useAuth(); // ensure signals ready
@@ -66,6 +59,18 @@ function InnerApp() {
               path="/login"
               element={(<Login />) as unknown as ReactElement}
             />
+            <Route
+              path="/register"
+              element={(<Register />) as unknown as ReactElement}
+            />
+            <Route
+              path="/forgot-password"
+              element={(<ForgotPassword />) as unknown as ReactElement}
+            />
+            <Route
+              path="/verify-email"
+              element={(<VerifyEmail />) as unknown as ReactElement}
+            />
           </Route>
           <Route
             element={
@@ -77,6 +82,40 @@ function InnerApp() {
             <Route
               path="/dashboard"
               element={(<Dashboard />) as unknown as ReactElement}
+            />
+            <Route
+              path="/pricing"
+              element={(<Pricing />) as unknown as ReactElement}
+            />
+            <Route
+              path="/transactions"
+              element={
+                (
+                  <ProtectedRoute roles={["user"]}>
+                    {<Transactions />}
+                  </ProtectedRoute>
+                ) as unknown as ReactElement
+              }
+            />
+            <Route
+              path="/admin/terms"
+              element={
+                (
+                  <ProtectedRoute roles={["admin", "super_admin"]}>
+                    {<TermsEditor />}
+                  </ProtectedRoute>
+                ) as unknown as ReactElement
+              }
+            />
+            <Route
+              path="/admin/terms/versions"
+              element={
+                (
+                  <ProtectedRoute roles={["admin", "super_admin"]}>
+                    {<TermsVersions />}
+                  </ProtectedRoute>
+                ) as unknown as ReactElement
+              }
             />
             <Route
               path="/outlets"

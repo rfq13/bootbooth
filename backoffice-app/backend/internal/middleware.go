@@ -26,10 +26,11 @@ func withLogging(next http.Handler) http.Handler {
         start := time.Now()
         
         // Don't wrap response writer for WebSocket requests to allow hijacking
+        // Don't wrap for SSE requests to allow flushing
         var rw http.ResponseWriter = w
         var statusCode = 200
         
-        if !isWebSocketRequest(r) {
+        if !isWebSocketRequest(r) && !isSSERequest(r) {
             rw = &responseWriter{ResponseWriter: w, statusCode: 200}
         }
         
@@ -60,6 +61,10 @@ func isWebSocketRequest(r *http.Request) bool {
            strings.ToLower(r.Header.Get("Upgrade")) == "websocket"
 }
 
+func isSSERequest(r *http.Request) bool {
+    return strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/event-stream")
+}
+
 type responseWriter struct {
     http.ResponseWriter
     statusCode int
@@ -68,6 +73,13 @@ type responseWriter struct {
 func (rw *responseWriter) WriteHeader(code int) {
     rw.statusCode = code
     rw.ResponseWriter.WriteHeader(code)
+}
+
+// Implement http.Flusher interface if the underlying ResponseWriter supports it
+func (rw *responseWriter) Flush() {
+    if flusher, ok := rw.ResponseWriter.(http.Flusher); ok {
+        flusher.Flush()
+    }
 }
 
 var ipLimiters = struct{ m map[string]*rate.Limiter }{ m: map[string]*rate.Limiter{} }
@@ -116,18 +128,22 @@ func withCORS(next http.Handler) http.Handler {
             "origin_list": originList,
             "final_origin": origin,
             "path": r.URL.Path,
+            "method": r.Method,
+            "headers": r.Header,
         })
         
         w.Header().Set("Access-Control-Allow-Origin", origin)
         w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
         w.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-CSRF-Token")
         w.Header().Set("Access-Control-Allow-Credentials", "true")
+        w.Header().Set("Access-Control-Max-Age", "86400")
         
         // Log final CORS headers
         l.Println(map[string]any{
             "event": "cors_headers_set",
             "final_origin": origin,
             "allow_credentials": "true",
+            "request_method": r.Method,
         })
         
         // normal OPTIONS handler
@@ -135,6 +151,8 @@ func withCORS(next http.Handler) http.Handler {
             l.Println(map[string]any{
                 "event": "cors_options_request",
                 "status": "204",
+                "path": r.URL.Path,
+                "request_headers": r.Header,
             })
             w.WriteHeader(http.StatusNoContent)
             return
@@ -207,10 +225,26 @@ func requireAuth(next http.Handler) http.Handler {
             next.ServeHTTP(w, r)
             return
         }
+        // Allow unauthenticated access to public auth endpoints
+        switch r.URL.Path {
+        case "/auth/login", "/auth/register", "/auth/forgot", "/auth/verify", "/healthz", "/terms", "/events":
+            next.ServeHTTP(w, r)
+            return
+        }
+        l := jsonLogger{}
         
         auth := r.Header.Get("Authorization")
+        l.Println(map[string]any{
+            "event": "auth_header_received",
+            "header": auth,
+        })
         if auth == "" || !strings.HasPrefix(auth, "Bearer ") { writeError(w, http.StatusUnauthorized, "unauthorized"); return }
         tok := strings.TrimPrefix(auth, "Bearer ")
+        
+        l.Println(map[string]any{
+            "event": "token_received",
+            "token": tok,
+        })
         secret := envString("BACKOFFICE_JWT_SECRET", "dev-secret")
         if tok == "devtoken" && secret == "dev-secret" {
             ctx := context.WithValue(r.Context(), ctxRole, "admin")
@@ -244,6 +278,12 @@ func requireRole(roles ...string) func(http.Handler) http.Handler {
 func requireCSRF(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         if r.Method == http.MethodGet || r.Method == http.MethodOptions { next.ServeHTTP(w, r); return }
+        // Skip CSRF for public auth endpoints
+        switch r.URL.Path {
+        case "/auth/login", "/auth/register", "/auth/forgot", "/auth/verify":
+            next.ServeHTTP(w, r)
+            return
+        }
         csrfHeader := r.Header.Get("X-CSRF-Token")
         var csrfCookie string
         if c, err := r.Cookie("csrf_token"); err == nil { csrfCookie = c.Value }

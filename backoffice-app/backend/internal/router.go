@@ -102,8 +102,27 @@ func buildRouter() http.Handler {
         email := strings.TrimSpace(body["email"])
         password := strings.TrimSpace(body["password"])
         if email == "" || password == "" { writeError(w, 400, "missing_fields"); return }
-        role := "admin"
-        if strings.Contains(strings.ToLower(email), "super") { role = "super_admin" }
+
+        db := func() *sql.DB { d, _ := NewDB(); return d }()
+        if db == nil { writeError(w, 500, "db_unavailable"); return }
+        defer db.Close()
+
+        var uid int
+        var ph, ps, role string
+        q := `SELECT u.id, u.password_hash, u.password_salt, r.code FROM users u JOIN roles r ON u.role_id = r.id WHERE LOWER(u.email) = LOWER($1)`
+        err := db.QueryRow(q, email).Scan(&uid, &ph, &ps, &role)
+        if err != nil {
+            allow := strings.EqualFold(envString("DEV_LOGIN_FALLBACK", "false"), "true")
+            if !allow { writeError(w, http.StatusUnauthorized, "invalid_credentials"); return }
+            role = "admin"
+            if strings.Contains(strings.ToLower(email), "super") { role = "super_admin" }
+        } else {
+            pepper := envString("PASSWORD_PEPPER", "")
+            if hashPassword(password, ps, pepper) != ph {
+                writeError(w, http.StatusUnauthorized, "invalid_credentials"); return
+            }
+        }
+
         secret := envString("BACKOFFICE_JWT_SECRET", "dev-secret")
         ttl := time.Hour * 8
         token, _ := makeJWT(map[string]any{"sub": email, "role": role}, ttl, secret)
@@ -149,9 +168,129 @@ func buildRouter() http.Handler {
         identity := map[string]any{"id": id, "booth_name": name, "location": map[string]any{"lat": lat, "lng": lng}, "created_at": createdAt}
         writeJSON(w, 200, map[string]any{"success": true, "data": identity})
     })
+    publicMux.HandleFunc("/terms", func(w http.ResponseWriter, r *http.Request) {
+        if r.Method != http.MethodGet { writeError(w, 405, "method_not_allowed"); return }
+        q := r.URL.Query()
+        db := func() *sql.DB { d, _ := NewDB(); return d }()
+        if db == nil { writeError(w, 500, "db_unavailable"); return }
+        defer db.Close()
+        if strings.EqualFold(q.Get("active"), "true") {
+            row := db.QueryRow(`SELECT id, major, minor, version_code, status, effective_date, version_notes, content, published_at FROM terms_versions WHERE status='active' ORDER BY published_at DESC NULLS LAST, id DESC LIMIT 1`)
+            var id, major, minor int; var code, status, notes string; var eff, pub sql.NullTime; var content json.RawMessage
+            if err := row.Scan(&id,&major,&minor,&code,&status,&eff,&notes,&content,&pub); err != nil { writeError(w, 404, "not_found"); return }
+            writeJSON(w, 200, map[string]any{"id":id,"major":major,"minor":minor,"version_code":code,"status":status,"effective_date":eff.Time,"version_notes":notes,"content":json.RawMessage(content)})
+            return
+        }
+        if idStr := q.Get("id"); idStr != "" {
+            id := atoi(idStr)
+            row := db.QueryRow(`SELECT id, major, minor, version_code, status, effective_date, version_notes, content, published_at FROM terms_versions WHERE id=$1`, id)
+            var tid, major, minor int; var code, status, notes string; var eff, pub sql.NullTime; var content json.RawMessage
+            if err := row.Scan(&tid,&major,&minor,&code,&status,&eff,&notes,&content,&pub); err != nil { writeError(w, 404, "not_found"); return }
+            writeJSON(w, 200, map[string]any{"id":tid,"major":major,"minor":minor,"version_code":code,"status":status,"effective_date":eff.Time,"version_notes":notes,"content":json.RawMessage(content)})
+            return
+        }
+        rows, _ := db.Query(`SELECT id, major, minor, version_code, status, effective_date, version_notes, published_at FROM terms_versions ORDER BY id DESC LIMIT 20`)
+        defer rows.Close()
+        out := []map[string]any{}
+        for rows.Next() { var id, major, minor int; var code, status, notes string; var eff, pub sql.NullTime; _ = rows.Scan(&id,&major,&minor,&code,&status,&eff,&notes,&pub); out = append(out, map[string]any{"id":id,"major":major,"minor":minor,"version_code":code,"status":status,"effective_date":eff.Time,"version_notes":notes,"published_at":pub.Time}) }
+        writeJSON(w, 200, out)
+    })
     publicHandler := withCORS(withRateLimit(withLogging(publicMux)))
     // protected endpoints
     authMux := http.NewServeMux()
+    // public registration
+    mux.HandleFunc("/auth/register", func(w http.ResponseWriter, r *http.Request) {
+        if r.Method != http.MethodPost { writeError(w, 405, "method_not_allowed"); return }
+        var body map[string]string
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil { writeError(w, 400, "invalid_json"); return }
+        email := strings.TrimSpace(body["email"])
+        password := strings.TrimSpace(body["password"])
+        if email == "" || password == "" { writeError(w, 400, "missing_fields"); return }
+        db := func() *sql.DB { d, _ := NewDB(); return d }()
+        if db == nil { writeError(w, 500, "db_unavailable"); return }
+        defer db.Close()
+        var exists int
+        _ = db.QueryRow(`SELECT COUNT(1) FROM users WHERE LOWER(email)=LOWER($1)`, email).Scan(&exists)
+        if exists > 0 { writeError(w, 409, "email_exists"); return }
+        salt := genSalt()
+        pepper := envString("PASSWORD_PEPPER", "")
+        hash := hashPassword(password, salt, pepper)
+        var roleID int
+        _ = db.QueryRow(`SELECT id FROM roles WHERE code='user'`).Scan(&roleID)
+        if roleID == 0 { writeError(w, 500, "role_missing"); return }
+        var uid int
+        err := db.QueryRow(`INSERT INTO users (email, password_hash, password_salt, role_id, is_verified) VALUES ($1,$2,$3,$4,false) RETURNING id`, email, hash, salt, roleID).Scan(&uid)
+        if err != nil { writeError(w, 500, "register_failed"); return }
+        tok := newUUID()
+        exp := time.Now().Add(24 * time.Hour)
+        _, _ = db.Exec(`INSERT INTO email_verifications (user_id, token, expires_at) SELECT id, $1, $2 FROM users WHERE email=$3`, tok, exp, email)
+        var tid int
+        _ = db.QueryRow(`SELECT id FROM terms_versions WHERE status='active' ORDER BY published_at DESC NULLS LAST, id DESC LIMIT 1`).Scan(&tid)
+        if tid > 0 {
+            _, _ = db.Exec(`INSERT INTO user_terms_agreements (user_id, terms_version_id) VALUES ($1,$2) ON CONFLICT (user_id, terms_version_id) DO NOTHING`, uid, tid)
+        }
+        writeJSON(w, 201, map[string]any{"success": true})
+    })
+    // forgot password
+    mux.HandleFunc("/auth/forgot", func(w http.ResponseWriter, r *http.Request) {
+        if r.Method != http.MethodPost { writeError(w, 405, "method_not_allowed"); return }
+        var body map[string]string
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil { writeError(w, 400, "invalid_json"); return }
+        email := strings.TrimSpace(body["email"])
+        if email == "" { writeError(w, 400, "missing_fields"); return }
+        db := func() *sql.DB { d, _ := NewDB(); return d }()
+        if db == nil { writeError(w, 500, "db_unavailable"); return }
+        defer db.Close()
+        var uid int
+        _ = db.QueryRow(`SELECT id FROM users WHERE LOWER(email)=LOWER($1)`, email).Scan(&uid)
+        if uid == 0 { writeJSON(w, 200, map[string]any{"success": true}); return }
+        tok := newUUID(); exp := time.Now().Add(2 * time.Hour)
+        _, _ = db.Exec(`INSERT INTO password_resets (user_id, token, expires_at) VALUES ($1,$2,$3)`, uid, tok, exp)
+        writeJSON(w, 200, map[string]any{"success": true})
+    })
+    // verify email
+    mux.HandleFunc("/auth/verify", func(w http.ResponseWriter, r *http.Request) {
+        if r.Method != http.MethodPost { writeError(w, 405, "method_not_allowed"); return }
+        var body map[string]string
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil { writeError(w, 400, "invalid_json"); return }
+        token := strings.TrimSpace(body["token"])
+        if token == "" { writeError(w, 400, "missing_fields"); return }
+        db := func() *sql.DB { d, _ := NewDB(); return d }()
+        if db == nil { writeError(w, 500, "db_unavailable"); return }
+        defer db.Close()
+        var uid int; var exp time.Time; var used bool
+        err := db.QueryRow(`SELECT user_id, expires_at, used FROM email_verifications WHERE token=$1`, token).Scan(&uid, &exp, &used)
+        if err != nil || used || time.Now().After(exp) { writeError(w, 400, "invalid_token"); return }
+        _, _ = db.Exec(`UPDATE users SET is_verified=true WHERE id=$1`, uid)
+        _, _ = db.Exec(`UPDATE email_verifications SET used=true WHERE token=$1`, token)
+        writeJSON(w, 200, map[string]any{"success": true})
+    })
+    // bootstrap super admin (one-time)
+    mux.HandleFunc("/auth/bootstrap-superadmin", func(w http.ResponseWriter, r *http.Request) {
+        if r.Method != http.MethodPost { writeError(w, 405, "method_not_allowed"); return }
+        raw, _ := io.ReadAll(r.Body)
+        var body map[string]string
+        _ = json.Unmarshal(raw, &body)
+        token := strings.TrimSpace(body["token"]) // bootstrap token
+        expected := envString("BOOTSTRAP_TOKEN", "")
+        if expected == "" || token == "" || token != expected { writeError(w, http.StatusForbidden, "forbidden"); return }
+        email := strings.TrimSpace(body["email"])
+        password := strings.TrimSpace(body["password"])
+        if email == "" || password == "" { writeError(w, 400, "missing_fields"); return }
+        db := func() *sql.DB { d, _ := NewDB(); return d }()
+        if db == nil { writeError(w, 500, "db_unavailable"); return }
+        defer db.Close()
+        var cnt int
+        _ = db.QueryRow(`SELECT COUNT(1) FROM users u JOIN roles r ON r.id=u.role_id WHERE r.code='super_admin'`).Scan(&cnt)
+        if cnt > 0 { writeJSON(w, 200, map[string]any{"success": true}); return }
+        salt := genSalt(); pepper := envString("PASSWORD_PEPPER", ""); hash := hashPassword(password, salt, pepper)
+        var roleID int
+        _ = db.QueryRow(`SELECT id FROM roles WHERE code='super_admin'`).Scan(&roleID)
+        if roleID == 0 { writeError(w, 500, "role_missing"); return }
+        _, err := db.Exec(`INSERT INTO users (email, password_hash, password_salt, role_id, is_verified) VALUES ($1,$2,$3,$4,true)`, email, hash, salt, roleID)
+        if err != nil { writeError(w, 500, "bootstrap_failed"); return }
+        writeJSON(w, 201, map[string]any{"success": true})
+    })
     authMux.HandleFunc("/session/", func(w http.ResponseWriter, r *http.Request) {
         if r.Method == http.MethodGet && hasSuffix(r.URL.Path, "/status") {
             path := r.URL.Path
@@ -174,8 +313,169 @@ func buildRouter() http.Handler {
     authMux.Handle("/booths", requireRole("super_admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, booths.list()) })))
     authMux.Handle("/booths/db", requireRole("super_admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, booths.listDB()) })))
     authMux.Handle("/admin-users", requireRole("super_admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { v, _ := s.ListAdminUsers(r.Context()); writeJSON(w, 200, v) })))
-    authMux.HandleFunc("/bookings", func(w http.ResponseWriter, r *http.Request) { v, _ := s.ListBookings(r.Context(), r.URL.Query().Get("status")); writeJSON(w, 200, v) })
-    mux.HandleFunc("/booking", func(w http.ResponseWriter, r *http.Request) {
+    authMux.Handle("/bookings", requireRole("admin", "super_admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        v, _ := s.ListBookings(r.Context(), r.URL.Query().Get("status"));
+        writeJSON(w, 200, v)
+    })))
+    // transactions endpoints
+    authMux.HandleFunc("/transactions", func(w http.ResponseWriter, r *http.Request) {
+        role, _ := r.Context().Value(ctxRole).(string)
+        if role != "user" { writeError(w, http.StatusForbidden, "forbidden"); return }
+        if r.Method == http.MethodGet {
+            email, _ := r.Context().Value(ctxSub).(string)
+            db := func() *sql.DB { d, _ := NewDB(); return d }()
+            if db == nil { writeError(w, 500, "db_unavailable"); return }
+            defer db.Close()
+            var uid int
+            _ = db.QueryRow(`SELECT id FROM users WHERE LOWER(email)=LOWER($1)`, email).Scan(&uid)
+            rows, _ := db.Query(`SELECT id, amount, currency, status, description, payment_ref, created_at, updated_at FROM transactions WHERE user_id=$1 ORDER BY created_at DESC`, uid)
+            defer rows.Close()
+            out := []map[string]any{}
+            for rows.Next() {
+                var id int; var amt float64; var cur, st, desc, pref string; var ca, ua time.Time
+                _ = rows.Scan(&id, &amt, &cur, &st, &desc, &pref, &ca, &ua)
+                out = append(out, map[string]any{"id": id, "amount": amt, "currency": cur, "status": st, "description": desc, "payment_ref": pref, "created_at": ca, "updated_at": ua})
+            }
+            writeJSON(w, 200, out); return
+        }
+        if r.Method == http.MethodPost {
+            var body struct{ Amount float64 `json:"amount"`; Currency string `json:"currency"`; Description string `json:"description"`; Items []struct{ Name string `json:"name"`; Quantity int `json:"quantity"`; Price float64 `json:"price"` } `json:"items"` }
+            if err := json.NewDecoder(r.Body).Decode(&body); err != nil { writeError(w, 400, "invalid_json"); return }
+            if body.Amount <= 0 || len(body.Items) == 0 { writeError(w, 400, "invalid_transaction"); return }
+            cur := body.Currency; if cur == "" { cur = "IDR" }
+            email, _ := r.Context().Value(ctxSub).(string)
+            db := func() *sql.DB { d, _ := NewDB(); return d }()
+            if db == nil { writeError(w, 500, "db_unavailable"); return }
+            defer db.Close()
+            var uid int; _ = db.QueryRow(`SELECT id FROM users WHERE LOWER(email)=LOWER($1)`, email).Scan(&uid)
+            tx, _ := db.Begin()
+            var id int
+            _ = tx.QueryRow(`INSERT INTO transactions (user_id, amount, currency, status, description) VALUES ($1,$2,$3,'created',$4) RETURNING id`, uid, body.Amount, cur, body.Description).Scan(&id)
+            for _, it := range body.Items { _, _ = tx.Exec(`INSERT INTO transaction_items (transaction_id, name, quantity, price) VALUES ($1,$2,$3,$4)`, id, it.Name, it.Quantity, it.Price) }
+            _, _ = tx.Exec(`INSERT INTO transaction_logs (transaction_id, activity) VALUES ($1,$2)`, id, "created")
+            _ = tx.Commit()
+            writeJSON(w, 201, map[string]any{"id": id})
+            return
+        }
+        writeError(w, 405, "method_not_allowed")
+    })
+    authMux.HandleFunc("/transactions/validate", func(w http.ResponseWriter, r *http.Request) {
+        role, _ := r.Context().Value(ctxRole).(string)
+        if role != "user" { writeError(w, http.StatusForbidden, "forbidden"); return }
+        if r.Method != http.MethodPost { writeError(w, 405, "method_not_allowed"); return }
+        var body struct{ ID int `json:"id"` }
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ID <= 0 { writeError(w, 400, "invalid_json"); return }
+        db := func() *sql.DB { d, _ := NewDB(); return d }()
+        if db == nil { writeError(w, 500, "db_unavailable"); return }
+        defer db.Close()
+        _, _ = db.Exec(`UPDATE transactions SET status='validated', updated_at=NOW() WHERE id=$1`, body.ID)
+        _, _ = db.Exec(`INSERT INTO transaction_logs (transaction_id, activity) VALUES ($1,$2)`, body.ID, "validated")
+        writeJSON(w, 200, map[string]any{"success": true})
+    })
+    authMux.HandleFunc("/transactions/pay", func(w http.ResponseWriter, r *http.Request) {
+        role, _ := r.Context().Value(ctxRole).(string)
+        if role != "user" { writeError(w, http.StatusForbidden, "forbidden"); return }
+        if r.Method != http.MethodPost { writeError(w, 405, "method_not_allowed"); return }
+        var body struct{ ID int `json:"id"` }
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ID <= 0 { writeError(w, 400, "invalid_json"); return }
+        db := func() *sql.DB { d, _ := NewDB(); return d }()
+        if db == nil { writeError(w, 500, "db_unavailable"); return }
+        defer db.Close()
+        ref := newUUID()
+        _, _ = db.Exec(`UPDATE transactions SET status='pending', payment_ref=$2, updated_at=NOW() WHERE id=$1`, body.ID, ref)
+        _, _ = db.Exec(`INSERT INTO transaction_logs (transaction_id, activity) VALUES ($1,$2)`, body.ID, "pending")
+        payURL := "/payments/mock?tid=" + strconv.Itoa(body.ID) + "&ref=" + ref
+        writeJSON(w, 200, map[string]any{"payment_url": payURL, "ref": ref})
+    })
+    // terms admin create/publish
+    authMux.Handle("/admin/terms", requireRole("admin","super_admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        if r.Method != http.MethodPost { writeError(w, 405, "method_not_allowed"); return }
+        var body struct{ Content json.RawMessage `json:"content"`; EffectiveDate string `json:"effective_date"`; VersionNotes string `json:"version_notes"` }
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.Content) == 0 { writeError(w, 400, "invalid_json"); return }
+        db := func() *sql.DB { d, _ := NewDB(); return d }()
+        if db == nil { writeError(w, 500, "db_unavailable"); return }
+        defer db.Close()
+        var major, minor int
+        _ = db.QueryRow(`SELECT COALESCE(MAX(major),1), COALESCE(MAX(minor),0) FROM terms_versions`).Scan(&major, &minor)
+        minor = minor + 1
+        code := fmt.Sprintf("v%d.%d", major, minor)
+        var eff sql.NullTime
+        if t, err := time.Parse(time.RFC3339, strings.TrimSpace(body.EffectiveDate)); err == nil { eff.Time = t; eff.Valid = true }
+        var uid int
+        sub, _ := r.Context().Value(ctxSub).(string)
+        _ = db.QueryRow(`SELECT id FROM users WHERE LOWER(email)=LOWER($1)`, sub).Scan(&uid)
+        var id int
+        _ = db.QueryRow(`INSERT INTO terms_versions (major, minor, version_code, status, effective_date, version_notes, content, created_by) VALUES ($1,$2,$3,'draft',$4,$5,$6,$7) RETURNING id`, major, minor, code, eff, body.VersionNotes, body.Content, uid).Scan(&id)
+        writeJSON(w, 201, map[string]any{"id": id, "version_code": code})
+    })))
+    authMux.Handle("/admin/terms/publish", requireRole("super_admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        if r.Method != http.MethodPost { writeError(w, 405, "method_not_allowed"); return }
+        var body struct{ ID int `json:"id"` }
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ID <= 0 { writeError(w, 400, "invalid_json"); return }
+        db := func() *sql.DB { d, _ := NewDB(); return d }()
+        if db == nil { writeError(w, 500, "db_unavailable"); return }
+        defer db.Close()
+        _, _ = db.Exec(`UPDATE terms_versions SET status='archived' WHERE status='active'`)
+        _, _ = db.Exec(`UPDATE terms_versions SET status='active', published_at=NOW() WHERE id=$1`, body.ID)
+        writeJSON(w, 200, map[string]any{"success": true})
+    })))
+    authMux.HandleFunc("/terms/agreement-status", func(w http.ResponseWriter, r *http.Request) {
+        if r.Method != http.MethodGet { writeError(w, 405, "method_not_allowed"); return }
+        db := func() *sql.DB { d, _ := NewDB(); return d }()
+        if db == nil { writeError(w, 500, "db_unavailable"); return }
+        defer db.Close()
+        var tid int
+        if idStr := r.URL.Query().Get("terms_id"); idStr != "" { tid = atoi(idStr) } else { _ = db.QueryRow(`SELECT id FROM terms_versions WHERE status='active' ORDER BY published_at DESC NULLS LAST, id DESC LIMIT 1`).Scan(&tid) }
+        sub, _ := r.Context().Value(ctxSub).(string)
+        var uid int; _ = db.QueryRow(`SELECT id FROM users WHERE LOWER(email)=LOWER($1)`, sub).Scan(&uid)
+        var cnt int; _ = db.QueryRow(`SELECT COUNT(1) FROM user_terms_agreements WHERE user_id=$1 AND terms_version_id=$2`, uid, tid).Scan(&cnt)
+        writeJSON(w, 200, map[string]any{"agreed": cnt > 0, "terms_id": tid})
+    })
+    authMux.HandleFunc("/terms/agree", func(w http.ResponseWriter, r *http.Request) {
+        role, _ := r.Context().Value(ctxRole).(string)
+        if role == "" { writeError(w, http.StatusUnauthorized, "unauthorized"); return }
+        if r.Method != http.MethodPost { writeError(w, 405, "method_not_allowed"); return }
+        var body struct{ TermsID int `json:"terms_id"` }
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.TermsID <= 0 { writeError(w, 400, "invalid_json"); return }
+        db := func() *sql.DB { d, _ := NewDB(); return d }()
+        if db == nil { writeError(w, 500, "db_unavailable"); return }
+        defer db.Close()
+        sub, _ := r.Context().Value(ctxSub).(string)
+        var uid int; _ = db.QueryRow(`SELECT id FROM users WHERE LOWER(email)=LOWER($1)`, sub).Scan(&uid)
+        _, _ = db.Exec(`INSERT INTO user_terms_agreements (user_id, terms_version_id) VALUES ($1,$2) ON CONFLICT (user_id, terms_version_id) DO NOTHING`, uid, body.TermsID)
+        writeJSON(w, 200, map[string]any{"success": true})
+    })
+    // create user by admin/super_admin
+    authMux.HandleFunc("/auth/users/create", func(w http.ResponseWriter, r *http.Request) {
+        if r.Method != http.MethodPost { writeError(w, 405, "method_not_allowed"); return }
+        roleActor, _ := r.Context().Value(ctxRole).(string)
+        var body map[string]string
+        if err := json.NewDecoder(r.Body).Decode(&body); err != nil { writeError(w, 400, "invalid_json"); return }
+        email := strings.TrimSpace(body["email"])
+        password := strings.TrimSpace(body["password"])
+        roleCode := strings.TrimSpace(body["role_code"]) // admin|outlet|kasir
+        outletIDStr := strings.TrimSpace(body["outlet_id"]) // optional
+        if email == "" || password == "" || roleCode == "" { writeError(w, 400, "missing_fields"); return }
+        // permission gate
+        if roleCode == "admin" && roleActor != "super_admin" { writeError(w, http.StatusForbidden, "forbidden"); return }
+        if (roleCode == "outlet" || roleCode == "kasir") && !(roleActor == "super_admin" || roleActor == "admin") { writeError(w, http.StatusForbidden, "forbidden"); return }
+        db := func() *sql.DB { d, _ := NewDB(); return d }()
+        if db == nil { writeError(w, 500, "db_unavailable"); return }
+        defer db.Close()
+        var exists int
+        _ = db.QueryRow(`SELECT COUNT(1) FROM users WHERE LOWER(email)=LOWER($1)`, email).Scan(&exists)
+        if exists > 0 { writeError(w, 409, "email_exists"); return }
+        var roleID int
+        _ = db.QueryRow(`SELECT id FROM roles WHERE code=$1`, roleCode).Scan(&roleID)
+        if roleID == 0 { writeError(w, 400, "invalid_role"); return }
+        salt := genSalt(); pepper := envString("PASSWORD_PEPPER", ""); hash := hashPassword(password, salt, pepper)
+        var outletID any
+        if outletIDStr != "" { outletID = atoi(outletIDStr) } else { outletID = nil }
+        _, err := db.Exec(`INSERT INTO users (email, password_hash, password_salt, role_id, outlet_id, is_verified) VALUES ($1,$2,$3,$4,$5,true)`, email, hash, salt, roleID, outletID)
+        if err != nil { writeError(w, 500, "create_failed"); return }
+        writeJSON(w, 201, map[string]any{"success": true})
+    })
+    authMux.HandleFunc("/booking", func(w http.ResponseWriter, r *http.Request) {
         if r.Method != http.MethodPost { writeError(w, 405, "method_not_allowed"); return }
         var body map[string]string
         json.NewDecoder(r.Body).Decode(&body)
@@ -184,7 +484,7 @@ func buildRouter() http.Handler {
         v, _ := s.CreateBooking(r.Context(), user, outlet)
         writeJSON(w, 201, v)
     })
-    mux.HandleFunc("/payment/confirm", func(w http.ResponseWriter, r *http.Request) {
+    authMux.HandleFunc("/payment/confirm", func(w http.ResponseWriter, r *http.Request) {
         if r.Method != http.MethodPost { writeError(w, 405, "method_not_allowed"); return }
         raw, _ := io.ReadAll(r.Body)
         secret := os.Getenv("PAYMENT_WEBHOOK_SECRET")
@@ -199,6 +499,24 @@ func buildRouter() http.Handler {
         }
         var body map[string]string
         _ = json.Unmarshal(raw, &body)
+        if tid := strings.TrimSpace(body["transaction_id"]); tid != "" {
+            db := func() *sql.DB { d, _ := NewDB(); return d }()
+            if db == nil { writeError(w, 500, "db_unavailable"); return }
+            defer db.Close()
+            st := strings.ToLower(strings.TrimSpace(body["status"]))
+            switch st {
+            case "success":
+                _, _ = db.Exec(`UPDATE transactions SET status='paid', updated_at=NOW() WHERE id=$1`, atoi(tid))
+            case "failed":
+                _, _ = db.Exec(`UPDATE transactions SET status='failed', updated_at=NOW() WHERE id=$1`, atoi(tid))
+            default:
+                _, _ = db.Exec(`UPDATE transactions SET status='pending', updated_at=NOW() WHERE id=$1`, atoi(tid))
+            }
+            _, _ = db.Exec(`INSERT INTO payment_logs (transaction_id, gateway, status, raw) VALUES ($1,$2,$3,$4)`, atoi(tid), "mock", st, string(raw))
+            _, _ = db.Exec(`INSERT INTO transaction_logs (transaction_id, activity) VALUES ($1,$2)`, atoi(tid), "webhook:"+st)
+            hub.Broadcast(map[string]any{"type": "TRANSACTION_STATUS", "transaction_id": tid, "status": st})
+            writeJSON(w, 200, map[string]any{"success": true}); return
+        }
         id := strings.TrimSpace(body["booking_id"])
         v, _ := s.ConfirmPayment(r.Context(), id)
         writeJSON(w, 200, v)
@@ -247,8 +565,20 @@ func buildRouter() http.Handler {
     // Handle all other routes with auth middleware
     protectedHandler := requireAuth(requireCSRF(withCORS(withRateLimit(withLogging(mux)))))
     
+    // Handle auth routes that require authentication but no CSRF
+    authHandler := requireAuth(withCORS(withRateLimit(withLogging(authMux))))
+    
     // Create a final handler that routes between public and protected
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        fmt.Println("DEBUG RAW PATH:", r.URL.Path)
+
+        if r.Method == http.MethodOptions {
+            withCORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+                w.WriteHeader(http.StatusNoContent)
+            })).ServeHTTP(w, r)
+            return
+        }
+
         // Handle public routes directly (no middleware)
         if r.URL.Path == "/socket-test" {
             w.Header().Set("Content-Type", "application/json")
@@ -308,10 +638,17 @@ func buildRouter() http.Handler {
         }
         
         // Route public endpoints
-        if r.URL.Path == "/api/booth/register" {
+        if r.URL.Path == "/api/booth/register" || r.URL.Path == "/terms" {
             publicHandler.ServeHTTP(w, r)
             return
         }
+        
+        // Route auth endpoints (bookings, outlets, booths, admin-users)
+        if strings.HasPrefix(r.URL.Path, "/bookings") || strings.HasPrefix(r.URL.Path, "/outlets") || strings.HasPrefix(r.URL.Path, "/booths") || strings.HasPrefix(r.URL.Path, "/admin-users") {
+            authHandler.ServeHTTP(w, r)
+            return
+        }
+        
         // Handle all other routes with auth middleware
         protectedHandler.ServeHTTP(w, r)
     })

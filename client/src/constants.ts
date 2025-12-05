@@ -7,3 +7,4 @@ export const WS_URL =
 export const BACKOFFICE_SOCKET_URL =
   (import.meta.env as any).VITE_BACKOFFICE_SOCKET_URL ||
   "http://localhost:8080";
+export const appName = import.meta.env.VITE_APP_NAME || "PijarRupa";
